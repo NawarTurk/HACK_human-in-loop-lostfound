@@ -1,8 +1,9 @@
 import os
 from pathlib import Path
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request, session
 from flask_cors import CORS
 from dotenv import load_dotenv
+from auth import login_user
 
 # Load ROOT .env file (lostfound/.env) using pathlib
 root_dir = Path(__file__).resolve().parent.parent
@@ -10,7 +11,8 @@ env_path = root_dir / '.env'
 load_dotenv(dotenv_path=env_path)
 
 app = Flask(__name__)
-CORS(app)
+app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
+CORS(app, supports_credentials=True)
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -21,9 +23,9 @@ def health():
 
 @app.route('/config', methods=['GET'])
 def config():
-    host = os.getenv('GATEWAY_HOST', '127.0.0.1')
-    port = os.getenv('GATEWAY_PORT', '8000')
-    debug = os.getenv('GATEWAY_DEBUG', '1')
+    host = os.getenv('GATEWAY_HOST')
+    port = os.getenv('GATEWAY_PORT')
+    debug = os.getenv('GATEWAY_DEBUG')
     
     return jsonify({
         "host": host,
@@ -31,10 +33,49 @@ def config():
         "debug": debug == '1'
     })
 
+@app.route('/auth/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    if not data:
+        return jsonify({
+            "status": "error",
+            "message": "No data provided"
+        }), 400
+    
+    username = data.get('username')
+    password = data.get('password')
+    
+    if not username or not password:
+        return jsonify({
+            "status": "error",
+            "message": "Username and password required"
+        }), 400
+    
+    user = login_user(username, password)
+    if user:
+        session['user'] = user
+        return jsonify({
+            "status": "ok",
+            "user": user
+        })
+    else:
+        return jsonify({
+            "status": "error",
+            "message": "Invalid username or password"
+        }), 401
+
+@app.route('/auth/logout', methods=['GET'])
+def logout():
+    session.pop('user', None)
+    return jsonify({
+        "status": "ok",
+        "message": "Logged out successfully"
+    })
+
 if __name__ == '__main__':
-    host = os.getenv('GATEWAY_HOST', '127.0.0.1')
-    port = int(os.getenv('GATEWAY_PORT', 8000))
-    debug = bool(int(os.getenv('GATEWAY_DEBUG', 1)))
+    host = os.getenv('GATEWAY_HOST')
+    port = int(os.getenv('GATEWAY_PORT'))
+    debug = bool(int(os.getenv('GATEWAY_DEBUG')))
     
     print(f"Loading config from: {env_path}")
     print(f"Starting gateway on {host}:{port} (debug={debug})")
