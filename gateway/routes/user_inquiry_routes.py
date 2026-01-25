@@ -80,12 +80,20 @@ def submit_inquiry():
     is_admin = user and user.get('role') == 'admin'
     
     if not is_admin:
-        username = inquiry.get('username')
-        user_folder = root_dir / 'storage' / 'user_inquiries' / username
-        data_path = user_folder / 'data.json'
-        user_inquiries = load_json_file(data_path)
+        # Check rate limit across ALL users
+        user_inquiries_folder = root_dir / 'storage' / 'user_inquiries'
+        all_inquiries = []
         
-        if is_rate_limited(user_inquiries):
+        # Collect all inquiries from all users
+        if user_inquiries_folder.exists():
+            for user_folder in user_inquiries_folder.iterdir():
+                if user_folder.is_dir():
+                    data_path = user_folder / 'data.json'
+                    if data_path.exists():
+                        user_inquiries = load_json_file(data_path)
+                        all_inquiries.extend(user_inquiries)
+        
+        if is_rate_limited(all_inquiries):
             return jsonify({
                 "status": "error",
                 "message": f"Too many inquiries. Please wait {RATE_LIMIT_SECONDS} seconds before submitting again."

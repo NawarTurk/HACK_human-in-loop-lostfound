@@ -65,7 +65,7 @@ export default function Login({ onLogin }) {
         </form>
 
         <div style={styles.hint}>
-          <small>Hint: admin/admin123 or user/user123</small>
+          <small>Hint: admin/admin123, nawar/user123, or nawar2/user123</small>
         </div>
       </div>
     </div>

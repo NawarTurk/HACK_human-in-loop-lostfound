@@ -226,8 +226,14 @@ export default function AdminDashboard({ user }) {
     setLoadingMatches(true);
     setProcessingInquiry(inquiryId);
     
-    // First update inquiry status to under_review
-    await handleUpdateInquiryStatus(username, inquiryId, 'under_review');
+    // Find the inquiry to check its current status
+    const inquiry = userInquiries[username]?.find(inq => inq.id === inquiryId);
+    const currentStatus = inquiry?.status;
+    
+    // Only update to under_review if not already matched or resolved
+    if (currentStatus !== 'matched' && currentStatus !== 'resolved') {
+      await handleUpdateInquiryStatus(username, inquiryId, 'under_review');
+    }
     
     try {
       const response = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/admin/inquiries/${username}/${inquiryId}/match`, {
@@ -271,13 +277,16 @@ export default function AdminDashboard({ user }) {
       const data = await response.json();
 
       if (response.ok && data.status === 'ok') {
-        // Refresh inquiries
-        fetchUserInquiries();
+        console.log('Inquiry status updated to matched');
       } else {
-        console.error('Failed to update status:', data.message);
+        console.error('Failed to update inquiry status:', data.message);
+        alert('Failed to update inquiry status: ' + (data.message || 'Unknown error'));
+        return; // Don't proceed if inquiry update failed
       }
     } catch (err) {
-      alert('Failed to update status: Network error');
+      console.error('Failed to update inquiry status:', err);
+      alert('Failed to update inquiry status: Network error');
+      return;
     }
     
     // Also update the inventory item status to matched
@@ -294,6 +303,8 @@ export default function AdminDashboard({ user }) {
         
         if (response.ok) {
           console.log('Inventory item status updated to matched');
+        } else {
+          console.error('Failed to update inventory status');
         }
       } catch (err) {
         console.error('Failed to update inventory status:', err);
@@ -307,6 +318,10 @@ export default function AdminDashboard({ user }) {
       return updated;
     });
     setProcessingInquiry(null);
+    
+    // Refresh both inquiries and inventory
+    fetchUserInquiries();
+    fetchInventory();
   };
 
   const handleOpenClarificationModal = (username, inquiry) => {
@@ -628,6 +643,7 @@ export default function AdminDashboard({ user }) {
                       <option value="Black">Black</option>
                       <option value="White">White</option>
                       <option value="Grey">Grey</option>
+                      <option value="Silver">Silver</option>
                       <option value="Blue">Blue</option>
                       <option value="Red">Red</option>
                       <option value="Green">Green</option>
@@ -840,6 +856,7 @@ export default function AdminDashboard({ user }) {
                                   <option value="Black">Black</option>
                                   <option value="White">White</option>
                                   <option value="Grey">Grey</option>
+                                  <option value="Silver">Silver</option>
                                   <option value="Blue">Blue</option>
                                   <option value="Red">Red</option>
                                   <option value="Green">Green</option>

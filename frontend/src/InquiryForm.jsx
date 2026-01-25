@@ -352,6 +352,7 @@ export default function InquiryForm({ user }) {
             <option value="Black">Black</option>
             <option value="White">White</option>
             <option value="Grey">Grey</option>
+            <option value="Silver">Silver</option>
             <option value="Blue">Blue</option>
             <option value="Red">Red</option>
             <option value="Green">Green</option>
