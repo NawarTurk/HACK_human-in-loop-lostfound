@@ -45,7 +45,7 @@ Good news! We may have found your lost item.
 Inquiry ID: {inquiry_id}
 Item Description: {inquiry_description}
 
-Your inquiry status has been updated to "WAITING_FOR_CLAIM".
+Your inquiry status has been updated to "MATCHED".
 
 Please visit the Lost & Found office to verify and claim your item.
 
@@ -59,7 +59,7 @@ Lost & Found Team
     <h2>Good news! We may have found your lost item.</h2>
     <p><strong>Inquiry ID:</strong> {inquiry_id}</p>
     <p><strong>Item Description:</strong> {inquiry_description}</p>
-    <p>Your inquiry status has been updated to <strong>WAITING_FOR_CLAIM</strong>.</p>
+    <p>Your inquiry status has been updated to <strong>MATCHED</strong>.</p>
     <p>Please visit the Lost & Found office to verify and claim your item.</p>
     <br>
     <p>Best regards,<br>Lost & Found Team</p>

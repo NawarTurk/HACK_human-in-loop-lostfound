@@ -72,8 +72,19 @@ def calculate_match_score(inquiry, inventory_item, text_weight=0.4, image_weight
     text_sim = cosine_similarity(inquiry_text_emb, item_text_emb)
     image_sim = cosine_similarity(inquiry_image_emb, item_image_emb)
     
+    # Determine if both have image embeddings
+    has_inquiry_image = inquiry_image_emb is not None and len(inquiry_image_emb) > 0
+    has_item_image = item_image_emb is not None and len(item_image_emb) > 0
+    has_both_images = has_inquiry_image and has_item_image
+    
     # Calculate weighted final score
-    final_sim = (text_weight * text_sim) + (image_weight * image_sim)
+    if has_both_images:
+        # Both have images: use weighted combination (40% text, 60% image)
+        final_sim = (text_weight * text_sim) + (image_weight * image_sim)
+    else:
+        # One or both missing images: use only text similarity
+        final_sim = text_sim
+        print(f"[SIMILARITY] Missing image embedding(s), using text-only similarity")
     
     return {
         "id": inventory_item.get('id'),

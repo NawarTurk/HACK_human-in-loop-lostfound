@@ -64,8 +64,12 @@ def submit_inquiry():
                 "message": f"Missing required field: {field}"
             }), 400
     
-    # Email is required only for user inquiries (not for admin inventory items)
-    if inquiry.get('status') != 'stored' and not inquiry.get('email'):
+    # Email is required only for user inquiries (admin can create inventory items without email)
+    # If inquiry comes from a regular user (not admin), require email
+    user = session.get('user')
+    is_admin = user and user.get('role') == 'admin'
+    
+    if not is_admin and not inquiry.get('email'):
         return jsonify({
             "status": "error",
             "message": "Email is required for user inquiries"

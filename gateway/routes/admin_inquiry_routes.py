@@ -65,6 +65,7 @@ def update_inquiry_status(username, inquiry_id):
         }), 400
     
     new_status = data.get('status')
+    matched_inventory_id = data.get('matched_inventory_id')  # Optional, sent when marking as match
     
     # Load user inquiries
     user_folder = root_dir / 'storage' / 'user_inquiries' / username
@@ -98,10 +99,14 @@ def update_inquiry_status(username, inquiry_id):
     if 'email_sent' not in inquiry:
         inquiry['email_sent'] = False
     
-    # CHECK: Trigger email notification ONLY for submitted -> waiting_user transition
+    # Store matched inventory ID if provided
+    if matched_inventory_id:
+        inquiry['matched_inventory_id'] = matched_inventory_id
+    
+    # CHECK: Trigger email notification ONLY for under_review -> matched transition
     email_should_send = (
-        old_status == 'submitted' and 
-        new_status == 'waiting_user' and 
+        old_status == 'under_review' and 
+        new_status == 'matched' and 
         not inquiry.get('email_sent', False)
     )
     
@@ -122,6 +127,18 @@ def update_inquiry_status(username, inquiry_id):
                 print(f"[ADMIN] Failed to send email to {student_email}")
         else:
             print(f"[ADMIN] No email address for inquiry {inquiry_id}")
+    
+    # If status is being set to resolved, also update the matched inventory item
+    if new_status == 'resolved' and inquiry.get('matched_inventory_id'):
+        inventory_path = root_dir / 'storage' / 'inventory_items' / 'data.json'
+        if inventory_path.exists():
+            inventory_items = load_json_file(inventory_path)
+            for idx, item in enumerate(inventory_items):
+                if item.get('id') == inquiry['matched_inventory_id']:
+                    inventory_items[idx]['status'] = 'resolved'
+                    save_json_file(inventory_path, inventory_items)
+                    print(f"[ADMIN] Also updated inventory item {item['id']} to resolved")
+                    break
     
     # Update status
     inquiry['status'] = new_status

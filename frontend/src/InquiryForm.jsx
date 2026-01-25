@@ -7,6 +7,7 @@ export default function InquiryForm({ user }) {
   const [color, setColor] = useState('');
   const [cost, setCost] = useState('');
   const [sizeCategory, setSizeCategory] = useState('');
+  const [email, setEmail] = useState('');
   const [image, setImage] = useState(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -71,6 +72,7 @@ export default function InquiryForm({ user }) {
     try {
       const formData = new FormData();
       formData.append('username', user.username);
+      formData.append('email', email);
       formData.append('description', description);
       formData.append('date_lost', dateLost);
       formData.append('place_lost', placeLost);
@@ -98,6 +100,7 @@ export default function InquiryForm({ user }) {
         setColor('');
         setCost('');
         setSizeCategory('');
+        setEmail('');
         setImage(null);
         // Reset file input
         const fileInput = document.querySelector('input[type="file"]');
@@ -161,6 +164,7 @@ export default function InquiryForm({ user }) {
                   )}
                   <p style={styles.inquiryDescription}>{inq.description}</p>
                   <div style={styles.inquiryDetails}>
+                    <span><strong>Email:</strong> {inq.email}</span>
                     <span><strong>Date Lost:</strong> {inq.date_lost}</span>
                     <span><strong>Place:</strong> {inq.place_lost}</span>
                     <span><strong>Color:</strong> {inq.color}</span>
@@ -191,6 +195,18 @@ export default function InquiryForm({ user }) {
             required
             rows="4"
             style={styles.textarea}
+          />
+        </div>
+
+        <div style={styles.field}>
+          <label style={styles.label}>Contact Email</label>
+          <input
+            type="email"
+            placeholder="your.email@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            style={styles.input}
           />
         </div>
 
@@ -426,7 +442,7 @@ const styles = {
   inquiryImage: {
     width: '100%',
     height: '200px',
-    objectFit: 'cover',
+    objectFit: 'contain',
     backgroundColor: '#f0f0f0',
     marginBottom: '12px'
   },

@@ -9,10 +9,11 @@ export default function AdminDashboard({ user }) {
   // Add inventory form state
   const [description, setDescription] = useState('');
   const [placeFound, setPlaceFound] = useState('');
+  const [dateFound, setDateFound] = useState(new Date().toISOString().split('T')[0]);
   const [color, setColor] = useState('');
   const [cost, setCost] = useState('');
   const [sizeCategory, setSizeCategory] = useState('');
-  const [status, setStatus] = useState('stored');
+  const [status, setStatus] = useState('submitted');
   const [image, setImage] = useState(null);
   const [formMessage, setFormMessage] = useState('');
   const [formError, setFormError] = useState('');
@@ -26,6 +27,11 @@ export default function AdminDashboard({ user }) {
   const [editCost, setEditCost] = useState('');
   const [editSize, setEditSize] = useState('');
   const [editPlace, setEditPlace] = useState('');
+
+  // Matching state
+  const [processingInquiry, setProcessingInquiry] = useState(null);
+  const [matches, setMatches] = useState({});
+  const [loadingMatches, setLoadingMatches] = useState(false);
 
   useEffect(() => {
     if (activeTab === 'inquiries') {
@@ -83,7 +89,7 @@ export default function AdminDashboard({ user }) {
       const formData = new FormData();
       formData.append('username', user.username);
       formData.append('description', description);
-      formData.append('date_lost', new Date().toISOString().split('T')[0]); // Current date
+      formData.append('date_lost', dateFound);
       formData.append('place_lost', placeFound);
       formData.append('color', color);
       formData.append('cost', cost);
@@ -106,10 +112,11 @@ export default function AdminDashboard({ user }) {
         // Clear form
         setDescription('');
         setPlaceFound('');
+        setDateFound(new Date().toISOString().split('T')[0]);
         setColor('');
         setCost('');
         setSizeCategory('');
-        setStatus('stored');
+        setStatus('submitted');
         setImage(null);
         const fileInput = document.querySelector('input[type="file"]');
         if (fileInput) fileInput.value = '';
@@ -181,6 +188,117 @@ export default function AdminDashboard({ user }) {
     }
   };
 
+  const handleUpdateInquiryStatus = async (username, inquiryId, newStatus) => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/admin/inquiries/${username}/${inquiryId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'ok') {
+        // Refresh inquiries
+        fetchUserInquiries();
+      } else {
+        console.error('Failed to update status:', data.message);
+      }
+    } catch (err) {
+      console.error('Failed to update status:', err);
+    }
+  };
+
+  const handleProcessInquiry = async (username, inquiryId) => {
+    setLoadingMatches(true);
+    setProcessingInquiry(inquiryId);
+    
+    // First update inquiry status to under_review
+    await handleUpdateInquiryStatus(username, inquiryId, 'under_review');
+    
+    try {
+      const response = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/admin/inquiries/${username}/${inquiryId}/match`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'ok') {
+        // Store matches for this inquiry
+        setMatches(prev => ({
+          ...prev,
+          [inquiryId]: data.matches
+        }));
+      } else {
+        alert('Failed to process inquiry: ' + (data.message || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Failed to process inquiry: Network error');
+    } finally {
+      setLoadingMatches(false);
+    }
+  };
+
+  const handleMarkAsMatch = async (username, inquiryId, inventoryId) => {
+    // Update inquiry status to matched and store the matched inventory ID
+    try {
+      const response = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/admin/inquiries/${username}/${inquiryId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ 
+          status: 'matched',
+          matched_inventory_id: inventoryId  // Store which inventory item was matched
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'ok') {
+        // Refresh inquiries
+        fetchUserInquiries();
+      } else {
+        console.error('Failed to update status:', data.message);
+      }
+    } catch (err) {
+      alert('Failed to update status: Network error');
+    }
+    
+    // Also update the inventory item status to matched
+    if (inventoryId) {
+      try {
+        const response = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/admin/inventory/${inventoryId}`, {
+          method: 'PATCH',
+          credentials: 'include',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ status: 'matched' })
+        });
+        
+        if (response.ok) {
+          console.log('Inventory item status updated to matched');
+        }
+      } catch (err) {
+        console.error('Failed to update inventory status:', err);
+      }
+    }
+    
+    // Clear matches after marking
+    setMatches(prev => {
+      const updated = { ...prev };
+      delete updated[inquiryId];
+      return updated;
+    });
+    setProcessingInquiry(null);
+  };
+
   return (
     <div style={styles.container}>
       <h2 style={styles.mainTitle}>Admin Dashboard</h2>
@@ -218,34 +336,119 @@ export default function AdminDashboard({ user }) {
                     </h3>
                     <div style={styles.inquiryList}>
                       {inquiries.map((inq) => (
-                        <div key={inq.id} style={styles.card}>
-                          <div style={styles.cardHeader}>
-                            <span style={styles.cardId}>ID: {inq.id.slice(0, 8)}...</span>
-                            <span style={styles.status}>{inq.status}</span>
-                          </div>
-                          <div style={styles.cardBody}>
-                            {inq.image_url && (
-                              <img
-                                src={`${import.meta.env.VITE_GATEWAY_URL}${inq.image_url}`}
-                                alt="Lost item"
-                                style={styles.image}
-                                onError={(e) => {
-                                  e.target.style.display = 'none';
-                                }}
-                              />
-                            )}
-                            <p style={styles.description}>{inq.description}</p>
-                            <div style={styles.details}>
-                              <span><strong>Date Lost:</strong> {inq.date_lost}</span>
-                              <span><strong>Place:</strong> {inq.place_lost}</span>
-                              <span><strong>Color:</strong> {inq.color}</span>
-                              <span><strong>Cost:</strong> ${inq.approx_cost}</span>
-                              <span><strong>Size:</strong> {inq.size_category}</span>
+                        <div key={inq.id} style={styles.inquiryWrapper}>
+                          <div style={styles.card}>
+                            <div style={styles.cardHeader}>
+                              <span style={styles.cardId}>ID: {inq.id.slice(0, 8)}...</span>
+                              <span style={styles.status}>{inq.status}</span>
                             </div>
-                            <div style={styles.timestamp}>
-                              Submitted: {new Date(inq.timestamp).toLocaleString()}
+                            <div style={styles.cardBody}>
+                              {inq.image_url && (
+                                <img
+                                  src={`${import.meta.env.VITE_GATEWAY_URL}${inq.image_url}`}
+                                  alt="Lost item"
+                                  style={styles.image}
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                  }}
+                                />
+                              )}
+                              <p style={styles.description}>{inq.description}</p>
+                              <div style={styles.details}>
+                                <span><strong>Email:</strong> {inq.email}</span>
+                                <span><strong>Date Lost:</strong> {inq.date_lost}</span>
+                                <span><strong>Place:</strong> {inq.place_lost}</span>
+                                <span><strong>Color:</strong> {inq.color}</span>
+                                <span><strong>Cost:</strong> ${inq.approx_cost}</span>
+                                <span><strong>Size:</strong> {inq.size_category}</span>
+                              </div>
+                              
+                              {/* Process Button */}
+                              <button
+                                onClick={() => handleProcessInquiry(username, inq.id)}
+                                disabled={loadingMatches && processingInquiry === inq.id}
+                                style={styles.processButton}
+                              >
+                                {loadingMatches && processingInquiry === inq.id ? 'Processing...' : 'Process Matches'}
+                              </button>
+                              
+                              <div style={styles.statusUpdate}>
+                                <label style={styles.statusLabel}>Update Status:</label>
+                                <select
+                                  value={inq.status}
+                                  onChange={(e) => handleUpdateInquiryStatus(username, inq.id, e.target.value)}
+                                  style={styles.statusSelect}
+                                >
+                                  <option value="submitted">Submitted</option>
+                                  <option value="under_review">Under Review</option>
+                                  <option value="matched">Matched</option>
+                                  <option value="resolved">Resolved</option>
+                                </select>
+                                {inq.email_sent && <span style={styles.emailSentBadge}>✓ Email Sent</span>}
+                              </div>
+                              <div style={styles.timestamp}>
+                                Submitted: {new Date(inq.timestamp).toLocaleString()}
+                              </div>
                             </div>
                           </div>
+                          
+                          {/* Matches Section - Expands Below Card */}
+                          {matches[inq.id] && matches[inq.id].length > 0 && (
+                            <div style={styles.matchesSection}>
+                              <h4 style={styles.matchesTitle}>
+                                Top {matches[inq.id].length} Matching Inventory Items
+                              </h4>
+                              <div style={styles.matchesList}>
+                                {matches[inq.id].map((match, idx) => (
+                                  <div key={match.inventory_id} style={styles.matchCard}>
+                                    <div style={styles.matchRank}>#{idx + 1}</div>
+                                    {match.image_url && (
+                                      <img
+                                        src={`${import.meta.env.VITE_GATEWAY_URL}${match.image_url}`}
+                                        alt="Match"
+                                        style={styles.matchImage}
+                                        onError={(e) => {
+                                          e.target.style.display = 'none';
+                                        }}
+                                      />
+                                    )}
+                                    <div style={styles.matchInfo}>
+                                      <p style={styles.matchDescription}>{match.description}</p>
+                                      <div style={styles.matchDetails}>
+                                        <span><strong>Color:</strong> {match.color}</span>
+                                        <span><strong>Place:</strong> {match.place_lost}</span>
+                                        <span><strong>Size:</strong> {match.size_category}</span>
+                                      </div>
+                                      <div style={styles.matchScores}>
+                                        <div style={styles.scoreBar}>
+                                          <span style={styles.scoreLabel}>Overall:</span>
+                                          <div style={styles.scoreValue}>
+                                            {(match.final_similarity * 100).toFixed(0)}%
+                                          </div>
+                                        </div>
+                                        <div style={styles.scoreDetails}>
+                                          <span>Text: {(match.text_similarity * 100).toFixed(0)}%</span>
+                                          <span>Image: {(match.image_similarity * 100).toFixed(0)}%</span>
+                                        </div>
+                                      </div>
+                                      <button
+                                        onClick={() => handleMarkAsMatch(username, inq.id, match.inventory_id)}
+                                        style={styles.markMatchButton}
+                                      >
+                                        Mark as Potential Match & Notify Student
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          
+                          {matches[inq.id] && matches[inq.id].length === 0 && (
+                            <div style={styles.noMatches}>
+                              No inventory matches found (threshold: 30%)
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -323,6 +526,17 @@ export default function AdminDashboard({ user }) {
                   </div>
 
                   <div style={styles.field}>
+                    <label style={styles.label}>Date Found</label>
+                    <input
+                      type="date"
+                      value={dateFound}
+                      onChange={(e) => setDateFound(e.target.value)}
+                      required
+                      style={styles.input}
+                    />
+                  </div>
+
+                  <div style={styles.field}>
                     <label style={styles.label}>Color</label>
                     <select
                       value={color}
@@ -382,9 +596,10 @@ export default function AdminDashboard({ user }) {
                       required
                       style={styles.input}
                     >
-                      <option value="stored">Stored (in inventory)</option>
-                      <option value="waiting_user">Waiting User (potential match found)</option>
-                      <option value="claimed">Claimed (picked up)</option>
+                      <option value="submitted">Submitted</option>
+                      <option value="under_review">Under Review</option>
+                      <option value="matched">Matched</option>
+                      <option value="resolved">Resolved</option>
                     </select>
                   </div>
 
@@ -445,9 +660,10 @@ export default function AdminDashboard({ user }) {
                                   onChange={(e) => setEditStatus(e.target.value)}
                                   style={styles.input}
                                 >
-                                  <option value="stored">Stored</option>
-                                  <option value="waiting_user">Waiting User</option>
-                                  <option value="claimed">Claimed</option>
+                                  <option value="submitted">Submitted</option>
+                                  <option value="under_review">Under Review</option>
+                                  <option value="matched">Matched</option>
+                                  <option value="resolved">Resolved</option>
                                 </select>
                               </div>
                               
@@ -705,7 +921,7 @@ const styles = {
     height: '200px',
     backgroundColor: '#f0f0f0',
     marginBottom: '12px',
-    objectFit: 'cover'
+    objectFit: 'contain'
   },
   description: {
     margin: 0,
@@ -724,6 +940,36 @@ const styles = {
   timestamp: {
     fontSize: '11px',
     color: '#999'
+  },
+  statusUpdate: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    marginTop: '12px',
+    paddingTop: '12px',
+    borderTop: '1px solid #e8e8e8'
+  },
+  statusLabel: {
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#333'
+  },
+  statusSelect: {
+    padding: '6px 12px',
+    fontSize: '13px',
+    border: '1px solid #d9d9d9',
+    borderRadius: '4px',
+    backgroundColor: 'white',
+    cursor: 'pointer',
+    flex: '1'
+  },
+  emailSentBadge: {
+    fontSize: '11px',
+    color: '#52c41a',
+    backgroundColor: '#f6ffed',
+    padding: '4px 8px',
+    borderRadius: '4px',
+    border: '1px solid #b7eb8f'
   },
   formSection: {
     padding: '24px',
@@ -802,15 +1048,6 @@ const styles = {
     color: '#cf1322',
     fontSize: '13px'
   },
-  statusSelect: {
-    padding: '4px 8px',
-    fontSize: '12px',
-    border: '1px solid #d9d9d9',
-    borderRadius: '4px',
-    fontWeight: '500',
-    color: '#0a6ed1',
-    backgroundColor: 'white'
-  },
   editButton: {
     padding: '4px 12px',
     fontSize: '11px',
@@ -862,5 +1099,140 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '12px'
+  },
+  inquiryWrapper: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+  processButton: {
+    width: '100%',
+    padding: '10px',
+    fontSize: '13px',
+    fontWeight: '500',
+    color: 'white',
+    backgroundColor: '#722ed1',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    marginTop: '8px',
+    transition: 'background-color 0.2s'
+  },
+  matchesSection: {
+    padding: '16px',
+    backgroundColor: '#f0f5ff',
+    border: '2px solid #adc6ff',
+    borderRadius: '8px'
+  },
+  matchesTitle: {
+    margin: '0 0 12px 0',
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#1d39c4'
+  },
+  matchesList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
+  },
+  matchCard: {
+    display: 'flex',
+    gap: '12px',
+    padding: '12px',
+    backgroundColor: 'white',
+    border: '1px solid #d9d9d9',
+    borderRadius: '6px',
+    position: 'relative'
+  },
+  matchRank: {
+    position: 'absolute',
+    top: '8px',
+    left: '8px',
+    width: '24px',
+    height: '24px',
+    borderRadius: '50%',
+    backgroundColor: '#1890ff',
+    color: 'white',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '11px',
+    fontWeight: '600'
+  },
+  matchImage: {
+    width: '120px',
+    height: '120px',
+    objectFit: 'contain',
+    borderRadius: '4px',
+    backgroundColor: '#f0f0f0',
+    flexShrink: 0
+  },
+  matchInfo: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px'
+  },
+  matchDescription: {
+    margin: 0,
+    fontSize: '13px',
+    color: '#333',
+    lineHeight: '1.4'
+  },
+  matchDetails: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: '12px',
+    fontSize: '12px',
+    color: '#666'
+  },
+  matchScores: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    padding: '8px',
+    backgroundColor: '#fafafa',
+    borderRadius: '4px'
+  },
+  scoreBar: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px'
+  },
+  scoreLabel: {
+    fontSize: '12px',
+    fontWeight: '500',
+    color: '#333'
+  },
+  scoreValue: {
+    fontSize: '14px',
+    fontWeight: '600',
+    color: '#1890ff'
+  },
+  scoreDetails: {
+    display: 'flex',
+    gap: '16px',
+    fontSize: '11px',
+    color: '#666'
+  },
+  markMatchButton: {
+    padding: '8px 16px',
+    fontSize: '12px',
+    fontWeight: '500',
+    color: 'white',
+    backgroundColor: '#52c41a',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    alignSelf: 'flex-start'
+  },
+  noMatches: {
+    padding: '16px',
+    textAlign: 'center',
+    backgroundColor: '#fff7e6',
+    border: '1px solid #ffd591',
+    borderRadius: '6px',
+    color: '#ad6800',
+    fontSize: '13px'
   }
 };

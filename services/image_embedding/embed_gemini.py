@@ -15,7 +15,7 @@ def embed_with_gemini(image_bytes, mime_type):
     print("[GEMINI] Processing image with Gemini Vision...")
     
     # Step 1: Vision model -> description
-    model = genai.GenerativeModel("gemini-2.0-flash-exp")
+    model = genai.GenerativeModel("gemini-2.0-flash")
     response = model.generate_content([
         "Describe this lost/found item briefly (color, type, size, distinctive marks):",
         {"mime_type": mime_type, "data": image_bytes}
