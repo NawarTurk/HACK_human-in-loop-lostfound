@@ -38,13 +38,18 @@ def save_json_file(path, data_list):
     with open(path, 'w', encoding='utf-8') as f:
         json.dump(data_list, f, indent=2, ensure_ascii=False)
 
-def append_inquiry(record_dict, username):
-    """Append inquiry record to user-specific data.json file."""
-    # Create user-specific folder path
-    user_folder = root_dir / 'storage' / 'user_inquiries' / username
-    user_folder.mkdir(parents=True, exist_ok=True)
-    
-    data_path = user_folder / 'data.json'
+def append_inquiry(record_dict, username, is_admin=False):
+    """Append inquiry record to user-specific or inventory data.json file."""
+    if is_admin:
+        # Admin items go to inventory
+        inventory_folder = root_dir / 'storage' / 'inventory_items'
+        inventory_folder.mkdir(parents=True, exist_ok=True)
+        data_path = inventory_folder / 'data.json'
+    else:
+        # User inquiries go to user-specific folder
+        user_folder = root_dir / 'storage' / 'user_inquiries' / username
+        user_folder.mkdir(parents=True, exist_ok=True)
+        data_path = user_folder / 'data.json'
     
     # Load existing data
     data_list = load_json_file(data_path)
@@ -58,7 +63,8 @@ def append_inquiry(record_dict, username):
     data_list.append(record_dict)
     save_json_file(data_path, data_list)
     
-    print(f"[GW] Inquiry saved to data.json with ID: {record_dict['id']}")
+    location = "inventory" if is_admin else f"{username}'s inquiries"
+    print(f"[GW] Record saved to {location} with ID: {record_dict['id']}")
     return record_dict['id']
 
 @app.route('/health', methods=['GET'])
@@ -131,12 +137,15 @@ def serve_image(username, filename):
     if not user:
         return jsonify({"status": "error", "message": "Not authenticated"}), 403
     
-    # Users can only access their own images
-    if user.get('username') != username:
+    # Admin can access all images, users can only access their own
+    if user.get('role') != 'admin' and user.get('username') != username:
         return jsonify({"status": "error", "message": "Unauthorized"}), 403
     
-    # Construct file path
-    image_path = root_dir / 'storage' / 'user_inquiries' / username / filename
+    # Construct file path (admin images in inventory_items, user images in user_inquiries)
+    if username == 'admin':
+        image_path = root_dir / 'storage' / 'inventory_items' / filename
+    else:
+        image_path = root_dir / 'storage' / 'user_inquiries' / username / filename
     
     if not image_path.exists():
         return jsonify({"status": "error", "message": "Image not found"}), 404
@@ -174,6 +183,76 @@ def list_inquiries():
     return jsonify({
         "status": "ok",
         "inquiries": inquiries_display
+    })
+
+@app.route('/admin/inquiries', methods=['GET'])
+def admin_all_inquiries():
+    """Get all user inquiries grouped by username (admin only)."""
+    user = session.get('user')
+    if not user or user.get('role') != 'admin':
+        return jsonify({
+            "status": "error",
+            "message": "Unauthorized - admin access required"
+        }), 403
+    
+    user_inquiries_folder = root_dir / 'storage' / 'user_inquiries'
+    all_inquiries = {}
+    
+    # Loop through each user folder
+    if user_inquiries_folder.exists():
+        for user_folder in user_inquiries_folder.iterdir():
+            if user_folder.is_dir():
+                username = user_folder.name
+                data_path = user_folder / 'data.json'
+                
+                if data_path.exists():
+                    inquiries = load_json_file(data_path)
+                    
+                    # Filter out embeddings
+                    inquiries_display = []
+                    for inq in inquiries:
+                        inq_copy = {k: v for k, v in inq.items() if k not in ['image_embedding', 'text_embedding']}
+                        
+                        # Add image_url if image exists
+                        if inq.get('image_filename'):
+                            inq_copy['image_url'] = f"/images/{username}/{inq['image_filename']}"
+                        
+                        inquiries_display.append(inq_copy)
+                    
+                    all_inquiries[username] = inquiries_display
+    
+    return jsonify({
+        "status": "ok",
+        "inquiries": all_inquiries
+    })
+
+@app.route('/admin/inventory', methods=['GET'])
+def admin_inventory():
+    """Get all inventory items (admin only)."""
+    user = session.get('user')
+    if not user or user.get('role') != 'admin':
+        return jsonify({
+            "status": "error",
+            "message": "Unauthorized - admin access required"
+        }), 403
+    
+    inventory_path = root_dir / 'storage' / 'inventory_items' / 'data.json'
+    inventory_items = load_json_file(inventory_path)
+    
+    # Filter out embeddings
+    items_display = []
+    for item in inventory_items:
+        item_copy = {k: v for k, v in item.items() if k not in ['image_embedding', 'text_embedding']}
+        
+        # Add image_url if image exists
+        if item.get('image_filename'):
+            item_copy['image_url'] = f"/images/admin/{item['image_filename']}"
+        
+        items_display.append(item_copy)
+    
+    return jsonify({
+        "status": "ok",
+        "inventory": items_display
     })
 
 @app.route('/inquiry/submit', methods=['POST'])
@@ -306,7 +385,11 @@ def submit_inquiry():
     }
     
     try:
-        inquiry_id = append_inquiry(record, inquiry.get('username'))
+        # Check if user is admin
+        user = session.get('user')
+        is_admin = user and user.get('role') == 'admin'
+        
+        inquiry_id = append_inquiry(record, inquiry.get('username'), is_admin=is_admin)
     except Exception as e:
         print(f"[GW] Failed to save inquiry to JSON: {str(e)}")
         # Continue anyway - don't fail the request

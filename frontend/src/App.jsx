@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import Login from './Login';
 import InquiryForm from './InquiryForm';
+import AdminDashboard from './AdminDashboard';
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -44,7 +45,11 @@ export default function App() {
           </button>
         </div>
         
-        <InquiryForm user={user} />
+        {user.role === 'admin' ? (
+          <AdminDashboard user={user} />
+        ) : (
+          <InquiryForm user={user} />
+        )}
       </div>
     </div>
   );
