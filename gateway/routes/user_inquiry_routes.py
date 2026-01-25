@@ -55,14 +55,21 @@ def submit_inquiry():
         "status": request.form.get('status')  # Can be set by admin
     }
     
-    # Validate required fields
-    required_fields = ['description', 'email', 'date_lost', 'place_lost', 'username', 'color', 'cost', 'size_category']
+    # Validate required fields (email not required for inventory items)
+    required_fields = ['description', 'date_lost', 'place_lost', 'username', 'color', 'cost', 'size_category']
     for field in required_fields:
         if not inquiry.get(field):
             return jsonify({
                 "status": "error",
-                "message": "Missing required fields"
+                "message": f"Missing required field: {field}"
             }), 400
+    
+    # Email is required only for user inquiries (not for admin inventory items)
+    if inquiry.get('status') != 'stored' and not inquiry.get('email'):
+        return jsonify({
+            "status": "error",
+            "message": "Email is required for user inquiries"
+        }), 400
     
     # Handle image file if provided
     image = request.files.get('image')

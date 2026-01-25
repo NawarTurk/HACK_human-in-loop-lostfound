@@ -16,6 +16,11 @@ def cosine_similarity(vec1, vec2):
         float: Similarity score between 0 and 1
     """
     if vec1 is None or vec2 is None:
+        print(f"[SIMILARITY] One or both embeddings are None: vec1={vec1 is not None}, vec2={vec2 is not None}")
+        return 0.0
+    
+    if len(vec1) == 0 or len(vec2) == 0:
+        print(f"[SIMILARITY] One or both embeddings are empty: vec1_len={len(vec1)}, vec2_len={len(vec2)}")
         return 0.0
     
     vec1 = np.array(vec1)
@@ -26,6 +31,7 @@ def cosine_similarity(vec1, vec2):
     norm2 = np.linalg.norm(vec2)
     
     if norm1 == 0 or norm2 == 0:
+        print(f"[SIMILARITY] One or both vectors have zero norm")
         return 0.0
     
     # Calculate cosine similarity
@@ -34,6 +40,7 @@ def cosine_similarity(vec1, vec2):
     # Convert to 0-1 range (cosine similarity is -1 to 1)
     similarity = (similarity + 1) / 2
     
+    print(f"[SIMILARITY] Calculated similarity: {similarity:.3f}")
     return float(similarity)
 
 def calculate_match_score(inquiry, inventory_item, text_weight=0.4, image_weight=0.6):
