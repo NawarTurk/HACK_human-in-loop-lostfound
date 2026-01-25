@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import sapLogo from './assets/SAP_ConUHAck.png';
 
 export default function Login({ onLogin }) {
   const [username, setUsername] = useState('');
@@ -36,6 +37,7 @@ export default function Login({ onLogin }) {
   return (
     <div style={styles.container}>
       <div style={styles.loginBox}>
+        <img src={sapLogo} alt="SAP ConUHack" style={styles.logo} />
         <h1 style={styles.title}>Lost & Found</h1>
         <p style={styles.subtitle}>Sign in to continue</p>
 
@@ -88,6 +90,13 @@ const styles = {
     boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
     width: '100%',
     maxWidth: '400px'
+  },
+  logo: {
+    width: '100%',
+    maxWidth: '2500px',
+    height: 'auto',
+    margin: '0 auto 24px auto',
+    display: 'block'
   },
   title: {
     margin: '0 0 8px 0',

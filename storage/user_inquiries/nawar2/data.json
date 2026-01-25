@@ -8,7 +8,7 @@
     "color": "Brown",
     "approx_cost": "22",
     "size_category": "Medium (phone, glasses case, power bank)",
-    "status": "submitted",
+    "status": "matched",
     "image_filename": "20260125_084859_71ywRwMbFbL._AC_SY300_SX300_QL70_ML2_.jpg",
     "image_embedding": [
       0.03626425,
@@ -1553,7 +1553,8 @@
     "created_at": "2026-01-25T13:49:01.392485",
     "id": "867d9c4c-1be3-4e50-af15-a61f1d23a21b",
     "timestamp": "2026-01-25T13:49:01.392763Z",
-    "email_sent": false
+    "email_sent": true,
+    "matched_inventory_id": "d7e5141d-2a8d-46be-8681-273c64d73db3"
   },
   {
     "username": "nawar2",
