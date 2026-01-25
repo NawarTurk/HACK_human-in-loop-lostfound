@@ -3,7 +3,7 @@ from pathlib import Path
 from datetime import datetime
 import requests
 from flask import Blueprint, jsonify, request, session
-from utils import load_json_file, append_inquiry, root_dir
+from utils import load_json_file, save_json_file, append_inquiry, root_dir
 
 user_inquiry_bp = Blueprint('user_inquiry', __name__, url_prefix='/inquiry')
 
@@ -184,4 +184,60 @@ def submit_inquiry():
     return jsonify({
         "status": "ok",
         "message": "Inquiry received"
+    })
+
+@user_inquiry_bp.route('/<inquiry_id>', methods=['DELETE'])
+def delete_inquiry(inquiry_id):
+    """Delete a user's inquiry (user can only delete their own)."""
+    user = session.get('user')
+    if not user:
+        return jsonify({
+            "status": "error",
+            "message": "Not authenticated"
+        }), 401
+    
+    username = user.get('username')
+    user_folder = root_dir / 'storage' / 'user_inquiries' / username
+    data_path = user_folder / 'data.json'
+    
+    # Load user's inquiries
+    inquiries = load_json_file(data_path)
+    
+    # Find the inquiry
+    item_index = None
+    for i, inquiry in enumerate(inquiries):
+        if inquiry.get('id') == inquiry_id:
+            item_index = i
+            break
+    
+    if item_index is None:
+        return jsonify({
+            "status": "error",
+            "message": "Inquiry not found"
+        }), 404
+    
+    # Get inquiry details before deleting
+    deleted_inquiry = inquiries[item_index]
+    
+    # Delete the image file if it exists
+    if deleted_inquiry.get('image_filename'):
+        image_path = user_folder / deleted_inquiry['image_filename']
+        if image_path.exists():
+            try:
+                image_path.unlink()
+                print(f"[GW] Deleted image file: {image_path}")
+            except Exception as e:
+                print(f"[GW] Failed to delete image file: {str(e)}")
+    
+    # Remove inquiry from list
+    inquiries.pop(item_index)
+    
+    # Save updated inquiries
+    save_json_file(data_path, inquiries)
+    
+    print(f"[GW] User {username} deleted inquiry {inquiry_id}")
+    
+    return jsonify({
+        "status": "ok",
+        "message": "Inquiry deleted successfully"
     })

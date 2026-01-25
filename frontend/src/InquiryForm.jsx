@@ -38,6 +38,30 @@ export default function InquiryForm({ user }) {
     }
   };
 
+  const handleDeleteInquiry = async (inquiryId) => {
+    if (!confirm('Are you sure you want to delete this inquiry?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/inquiry/${inquiryId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+      if (response.ok && data.status === 'ok') {
+        // Refresh the inquiry list
+        fetchInquiries();
+      } else {
+        alert(data.message || 'Failed to delete inquiry');
+      }
+    } catch (err) {
+      console.error('Failed to delete inquiry:', err);
+      alert('Failed to delete inquiry');
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage('');
@@ -107,7 +131,16 @@ export default function InquiryForm({ user }) {
               <div key={inq.id} style={styles.inquiryCard}>
                 <div style={styles.inquiryHeader}>
                   <span style={styles.inquiryId}>ID: {inq.id.slice(0, 8)}...</span>
-                  <span style={styles.inquiryStatus}>{inq.status}</span>
+                  <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+                    <span style={styles.inquiryStatus}>{inq.status}</span>
+                    <button
+                      onClick={() => handleDeleteInquiry(inq.id)}
+                      style={styles.deleteButton}
+                      title="Delete inquiry"
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
                 <div style={styles.inquiryBody}>
                   {inq.image_url && (
@@ -263,9 +296,9 @@ export default function InquiryForm({ user }) {
             style={styles.input}
           >
             <option value="">Select size…</option>
-            <option value="Small">Small (keys, USB stick, AirPods)</option>
-            <option value="Medium">Medium (phone, glasses case, power bank)</option>
-            <option value="Large">Large (laptop, tablet, backpack)</option>
+            <option value="Small (keys, USB stick, AirPods)">Small (keys, USB stick, AirPods)</option>
+            <option value="Medium (phone, glasses case, power bank)">Medium (phone, glasses case, power bank)</option>
+            <option value="Large (laptop, tablet, backpack)">Large (laptop, tablet, backpack)</option>
             <option value="Clothing Small">Clothing Small</option>
             <option value="Clothing Medium">Clothing Medium</option>
             <option value="Clothing Large or Bigger">Clothing Large or Bigger</option>
@@ -333,24 +366,27 @@ const styles = {
     fontStyle: 'italic'
   },
   inquiryList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px'
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    gap: '20px'
   },
   inquiryCard: {
     border: '1px solid #e8e8e8',
-    borderRadius: '6px',
-    padding: '16px',
-    backgroundColor: '#fafafa',
-    transition: 'box-shadow 0.2s',
-    cursor: 'default'
+    borderRadius: '8px',
+    overflow: 'hidden',
+    backgroundColor: 'white',
+    transition: 'box-shadow 0.2s, transform 0.2s',
+    cursor: 'default',
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%'
   },
   inquiryHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '12px',
-    paddingBottom: '8px',
+    padding: '12px',
+    backgroundColor: '#f8f9fa',
     borderBottom: '1px solid #e8e8e8'
   },
   inquiryId: {
@@ -367,18 +403,32 @@ const styles = {
     borderRadius: '12px',
     textTransform: 'capitalize'
   },
+  deleteButton: {
+    background: 'none',
+    border: 'none',
+    fontSize: '16px',
+    cursor: 'pointer',
+    padding: '4px',
+    opacity: 0.6,
+    transition: 'opacity 0.2s, transform 0.2s',
+    ':hover': {
+      opacity: 1,
+      transform: 'scale(1.1)'
+    }
+  },
   inquiryBody: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px'
+    gap: '12px',
+    padding: '16px',
+    flex: '1'
   },
   inquiryImage: {
     width: '100%',
-    maxWidth: '300px',
-    height: 'auto',
-    borderRadius: '4px',
-    marginBottom: '8px',
-    objectFit: 'cover'
+    height: '200px',
+    objectFit: 'cover',
+    backgroundColor: '#f0f0f0',
+    marginBottom: '12px'
   },
   imagePlaceholder: {
     padding: '12px',
@@ -397,10 +447,11 @@ const styles = {
   },
   inquiryDetails: {
     display: 'flex',
-    flexWrap: 'wrap',
-    gap: '12px',
+    flexDirection: 'column',
+    gap: '6px',
     fontSize: '13px',
-    color: '#666'
+    color: '#666',
+    marginTop: 'auto'
   },
   inquiryTimestamp: {
     fontSize: '11px',

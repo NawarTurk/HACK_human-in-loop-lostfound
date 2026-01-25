@@ -365,9 +365,9 @@ export default function AdminDashboard({ user }) {
                       style={styles.input}
                     >
                       <option value="">Select size…</option>
-                      <option value="Small">Small (keys, USB stick, AirPods)</option>
-                      <option value="Medium">Medium (phone, glasses case, power bank)</option>
-                      <option value="Large">Large (laptop, tablet, backpack)</option>
+                      <option value="Small (keys, USB stick, AirPods)">Small (keys, USB stick, AirPods)</option>
+                      <option value="Medium (phone, glasses case, power bank)">Medium (phone, glasses case, power bank)</option>
+                      <option value="Large (laptop, tablet, backpack)">Large (laptop, tablet, backpack)</option>
                       <option value="Clothing Small">Clothing Small</option>
                       <option value="Clothing Medium">Clothing Medium</option>
                       <option value="Clothing Large or Bigger">Clothing Large or Bigger</option>
@@ -658,22 +658,25 @@ const styles = {
     borderRadius: '4px'
   },
   inquiryList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px'
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+    gap: '20px'
   },
   card: {
     border: '1px solid #e8e8e8',
-    borderRadius: '6px',
-    padding: '16px',
-    backgroundColor: '#fafafa'
+    borderRadius: '8px',
+    overflow: 'hidden',
+    backgroundColor: 'white',
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%'
   },
   cardHeader: {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: '12px',
-    paddingBottom: '8px',
+    padding: '12px',
+    backgroundColor: '#f8f9fa',
     borderBottom: '1px solid #e8e8e8'
   },
   cardId: {
@@ -693,13 +696,15 @@ const styles = {
   cardBody: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px'
+    gap: '12px',
+    padding: '16px',
+    flex: '1'
   },
   image: {
     width: '100%',
-    maxWidth: '300px',
-    height: 'auto',
-    borderRadius: '4px',
+    height: '200px',
+    backgroundColor: '#f0f0f0',
+    marginBottom: '12px',
     objectFit: 'cover'
   },
   description: {
@@ -710,10 +715,11 @@ const styles = {
   },
   details: {
     display: 'flex',
-    flexWrap: 'wrap',
-    gap: '12px',
+    flexDirection: 'column',
+    gap: '6px',
     fontSize: '13px',
-    color: '#666'
+    color: '#666',
+    marginTop: 'auto'
   },
   timestamp: {
     fontSize: '11px',

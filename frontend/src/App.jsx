@@ -63,7 +63,7 @@ const styles = {
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   },
   content: {
-    maxWidth: '600px',
+    maxWidth: '1200px',
     margin: '0 auto'
   },
   header: {
