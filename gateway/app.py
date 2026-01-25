@@ -137,14 +137,11 @@ def submit_inquiry():
                     if response.status_code == 200:
                         emb_json = response.json()
                         embedding = emb_json.get("embedding", [])
-                        description = emb_json.get("description", "")
 
                         print("[GW] Embedding received, length =", len(embedding))
-                        print("[GW] AI Description:", description)
 
                         # attach for later use
                         inquiry["embedding"] = embedding
-                        inquiry["ai_description"] = description
                     else:
                         print(f"[GW] Embedding FAILED: HTTP {response.status_code}")
             except Exception as e:
@@ -153,6 +150,29 @@ def submit_inquiry():
             print("ERROR: No user in session!")
     else:
         print("DEBUG: No image uploaded or empty filename")
+    
+    # Call text embedding service for description
+    description = inquiry.get('description')
+    if description:
+        print("[GW] Starting text embedding...")
+        try:
+            text_emb_host = os.getenv('TEXT_EMB_HOST')
+            text_emb_port = os.getenv('TEXT_EMB_PORT')
+            text_emb_url = f"http://{text_emb_host}:{text_emb_port}/embed-text"
+            
+            response = requests.post(text_emb_url, json={"text": description}, timeout=10)
+            if response.status_code == 200:
+                text_emb_json = response.json()
+                text_embedding = text_emb_json.get("embedding", [])
+                
+                print("[GW] Text embedding received, length =", len(text_embedding))
+                
+                # attach for later use
+                inquiry["text_embedding"] = text_embedding
+            else:
+                print(f"[GW] Text embedding FAILED: HTTP {response.status_code}")
+        except Exception as e:
+            print(f"[GW] Text embedding FAILED: {str(e)}")
     
     # Print to console for now latter for dataaset
     print("Inquiry received:", inquiry)
