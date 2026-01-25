@@ -1,5 +1,7 @@
 import os
 from pathlib import Path
+from datetime import datetime
+import requests
 from flask import Flask, jsonify, request, session
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -79,21 +81,77 @@ def get_user():
 
 @app.route('/inquiry/submit', methods=['POST'])
 def submit_inquiry():
-    data = request.get_json()
-    if not data:
-        return jsonify({
-            "status": "error",
-            "message": "No data provided"
-        }), 400
-    
+    # Handle FormData instead of JSON
     inquiry = {
-        "description": data.get('description'),
-        "date_lost": data.get('date_lost'),
-        "place_lost": data.get('place_lost'),
-        "username": data.get('username')
+        "description": request.form.get('description'),
+        "date_lost": request.form.get('date_lost'),
+        "place_lost": request.form.get('place_lost'),
+        "username": request.form.get('username')
     }
     
-    # Print to console for now (no database yet)
+    # Handle image file if provided
+    image = request.files.get('image')
+    print(f"DEBUG: Image file received: {image}")
+    print(f"DEBUG: Image filename: {image.filename if image else 'None'}")
+    
+    if image and image.filename:
+        # Get user role from session
+        user = session.get('user')
+        print(f"DEBUG: User from session: {user}")
+        
+        if user:
+            user_role = user.get('role', 'user')
+            
+            # Determine storage folder based on role
+            if user_role == 'admin':
+                storage_folder = Path(__file__).resolve().parent.parent / 'storage' / 'inventory_items'
+            else:
+                storage_folder = Path(__file__).resolve().parent.parent / 'storage' / 'user_inquiries'
+            
+            # Create folder if it doesn't exist
+            storage_folder.mkdir(parents=True, exist_ok=True)
+            
+            # Generate unique filename with timestamp
+            timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+            safe_filename = f"{timestamp}_{image.filename}"
+            file_path = storage_folder / safe_filename
+            
+            # Save the file
+            image.save(str(file_path))
+            
+            # Add saved filename to inquiry
+            inquiry['image_saved_as'] = safe_filename
+            print(f"Image saved successfully to: {file_path}")
+            
+            # Call image embedding service
+            print("[GW] Starting image embedding...")
+            try:
+                emb_host = os.getenv('IMG_EMB_HOST')
+                emb_port = os.getenv('IMG_EMB_PORT')
+                emb_url = f"http://{emb_host}:{emb_port}/embed"
+                
+                # Reopen the file to send to embedding service
+                with open(file_path, 'rb') as f:
+                    files = {'image': (safe_filename, f, 'image/jpeg')}
+                    response = requests.post(emb_url, files=files, timeout=10)
+                    if response.status_code == 200:
+                        emb_json = response.json()
+                        embedding = emb_json.get("embedding", [])
+
+                        print("[GW] Embedding received, length =", len(embedding))
+
+                        # attach it for later use
+                        inquiry["embedding"] = embedding
+                    else:
+                        print(f"[GW] Embedding FAILED: HTTP {response.status_code}")
+            except Exception as e:
+                print(f"[GW] Embedding FAILED: {str(e)}")
+        else:
+            print("ERROR: No user in session!")
+    else:
+        print("DEBUG: No image uploaded or empty filename")
+    
+    # Print to console for now latter for dataaset
     print("Inquiry received:", inquiry)
     
     return jsonify({

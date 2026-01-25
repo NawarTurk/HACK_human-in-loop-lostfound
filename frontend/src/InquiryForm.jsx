@@ -4,6 +4,7 @@ export default function InquiryForm({ user }) {
   const [description, setDescription] = useState('');
   const [dateLost, setDateLost] = useState('');
   const [placeLost, setPlaceLost] = useState('');
+  const [image, setImage] = useState(null);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -15,16 +16,19 @@ export default function InquiryForm({ user }) {
     setLoading(true);
 
     try {
+      const formData = new FormData();
+      formData.append('username', user.username);
+      formData.append('description', description);
+      formData.append('date_lost', dateLost);
+      formData.append('place_lost', placeLost);
+      if (image) {
+        formData.append('image', image);
+      }
+
       const response = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/inquiry/submit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({
-          description,
-          date_lost: dateLost,
-          place_lost: placeLost,
-          username: user.username
-        })
+        body: formData
       });
 
       const data = await response.json();
@@ -35,6 +39,10 @@ export default function InquiryForm({ user }) {
         setDescription('');
         setDateLost('');
         setPlaceLost('');
+        setImage(null);
+        // Reset file input
+        const fileInput = document.querySelector('input[type="file"]');
+        if (fileInput) fileInput.value = '';
       } else {
         setError(data.message || 'Failed to submit inquiry');
       }
@@ -119,6 +127,16 @@ export default function InquiryForm({ user }) {
             <option value="X">X — X Annex</option>
             <option value="Z">Z — Z Annex</option>
           </select>
+        </div>
+
+        <div style={styles.field}>
+          <label style={styles.label}>Image (optional)</label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setImage(e.target.files[0])}
+            style={styles.input}
+          />
         </div>
 
         {message && <div style={styles.success}>{message}</div>}
