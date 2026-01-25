@@ -137,11 +137,14 @@ def submit_inquiry():
                     if response.status_code == 200:
                         emb_json = response.json()
                         embedding = emb_json.get("embedding", [])
+                        description = emb_json.get("description", "")
 
                         print("[GW] Embedding received, length =", len(embedding))
+                        print("[GW] AI Description:", description)
 
-                        # attach it for later use
+                        # attach for later use
                         inquiry["embedding"] = embedding
+                        inquiry["ai_description"] = description
                     else:
                         print(f"[GW] Embedding FAILED: HTTP {response.status_code}")
             except Exception as e:
