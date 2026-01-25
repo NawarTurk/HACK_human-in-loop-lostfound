@@ -72,6 +72,11 @@ def logout():
         "message": "Logged out successfully"
     })
 
+@app.route('/auth/user', methods=['GET'])
+def get_user():
+    user = session.get('user')
+    return jsonify({"user": user if user else None})
+
 if __name__ == '__main__':
     host = os.getenv('GATEWAY_HOST')
     port = int(os.getenv('GATEWAY_PORT'))
