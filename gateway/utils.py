@@ -49,6 +49,10 @@ def append_inquiry(record_dict, username, is_admin=False):
     if 'status' not in record_dict or not record_dict['status']:
         record_dict['status'] = 'stored' if is_admin else 'submitted'
     
+    # Initialize email_sent flag for user inquiries
+    if not is_admin:
+        record_dict['email_sent'] = False
+    
     # Append and save
     data_list.append(record_dict)
     save_json_file(data_path, data_list)

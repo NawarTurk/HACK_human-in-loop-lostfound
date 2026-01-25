@@ -45,6 +45,7 @@ def submit_inquiry():
     # Handle FormData instead of JSON
     inquiry = {
         "description": request.form.get('description'),
+        "email": request.form.get('email'),
         "date_lost": request.form.get('date_lost'),
         "place_lost": request.form.get('place_lost'),
         "username": request.form.get('username'),
@@ -55,7 +56,7 @@ def submit_inquiry():
     }
     
     # Validate required fields
-    required_fields = ['description', 'date_lost', 'place_lost', 'username', 'color', 'cost', 'size_category']
+    required_fields = ['description', 'email', 'date_lost', 'place_lost', 'username', 'color', 'cost', 'size_category']
     for field in required_fields:
         if not inquiry.get(field):
             return jsonify({
@@ -159,6 +160,7 @@ def submit_inquiry():
     # ============================================
     record = {
         "username": inquiry.get('username'),
+        "email": inquiry.get('email'),
         "description": inquiry.get('description'),
         "date_lost": inquiry.get('date_lost'),
         "place_lost": inquiry.get('place_lost'),
