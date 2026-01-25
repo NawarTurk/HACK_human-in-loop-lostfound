@@ -77,6 +77,30 @@ def get_user():
     user = session.get('user')
     return jsonify({"user": user if user else None})
 
+@app.route('/inquiry/submit', methods=['POST'])
+def submit_inquiry():
+    data = request.get_json()
+    if not data:
+        return jsonify({
+            "status": "error",
+            "message": "No data provided"
+        }), 400
+    
+    inquiry = {
+        "description": data.get('description'),
+        "date_lost": data.get('date_lost'),
+        "place_lost": data.get('place_lost'),
+        "username": data.get('username')
+    }
+    
+    # Print to console for now (no database yet)
+    print("Inquiry received:", inquiry)
+    
+    return jsonify({
+        "status": "ok",
+        "message": "Inquiry received"
+    })
+
 if __name__ == '__main__':
     host = os.getenv('GATEWAY_HOST')
     port = int(os.getenv('GATEWAY_PORT'))
