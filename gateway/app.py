@@ -1,8 +1,10 @@
 import os
+import json
+import uuid
 from pathlib import Path
 from datetime import datetime
 import requests
-from flask import Flask, jsonify, request, session
+from flask import Flask, jsonify, request, session, send_file
 from flask_cors import CORS
 from dotenv import load_dotenv
 from auth import login_user
@@ -15,6 +17,49 @@ load_dotenv(dotenv_path=env_path)
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-key-change-in-production')
 CORS(app, supports_credentials=True)
+
+# ============================================
+# JSON Persistence Helper Functions
+# ============================================
+
+def load_json_file(path):
+    """Load JSON file and return list. Returns empty list if file doesn't exist."""
+    if not path.exists():
+        return []
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        return []
+
+def save_json_file(path, data_list):
+    """Save list to JSON file with pretty formatting."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(data_list, f, indent=2, ensure_ascii=False)
+
+def append_inquiry(record_dict, username):
+    """Append inquiry record to user-specific data.json file."""
+    # Create user-specific folder path
+    user_folder = root_dir / 'storage' / 'user_inquiries' / username
+    user_folder.mkdir(parents=True, exist_ok=True)
+    
+    data_path = user_folder / 'data.json'
+    
+    # Load existing data
+    data_list = load_json_file(data_path)
+    
+    # Add record with unique ID, timestamp, and status
+    record_dict['id'] = str(uuid.uuid4())
+    record_dict['timestamp'] = datetime.utcnow().isoformat() + 'Z'
+    record_dict['status'] = 'submitted'
+    
+    # Append and save
+    data_list.append(record_dict)
+    save_json_file(data_path, data_list)
+    
+    print(f"[GW] Inquiry saved to data.json with ID: {record_dict['id']}")
+    return record_dict['id']
 
 @app.route('/health', methods=['GET'])
 def health():
@@ -79,6 +124,58 @@ def get_user():
     user = session.get('user')
     return jsonify({"user": user if user else None})
 
+@app.route('/images/<username>/<filename>', methods=['GET'])
+def serve_image(username, filename):
+    """Serve user images securely."""
+    user = session.get('user')
+    if not user:
+        return jsonify({"status": "error", "message": "Not authenticated"}), 403
+    
+    # Users can only access their own images
+    if user.get('username') != username:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 403
+    
+    # Construct file path
+    image_path = root_dir / 'storage' / 'user_inquiries' / username / filename
+    
+    if not image_path.exists():
+        return jsonify({"status": "error", "message": "Image not found"}), 404
+    
+    return send_file(str(image_path), mimetype='image/jpeg')
+
+@app.route('/inquiry/list', methods=['GET'])
+def list_inquiries():
+    """Get all inquiries for the logged-in user."""
+    user = session.get('user')
+    if not user:
+        return jsonify({
+            "status": "error",
+            "message": "Not authenticated"
+        }), 401
+    
+    username = user.get('username')
+    user_folder = root_dir / 'storage' / 'user_inquiries' / username
+    data_path = user_folder / 'data.json'
+    
+    # Load user's inquiries
+    inquiries = load_json_file(data_path)
+    
+    # Return inquiries without embeddings (too large for frontend display)
+    inquiries_display = []
+    for inq in inquiries:
+        inq_copy = {k: v for k, v in inq.items() if k not in ['image_embedding', 'text_embedding']}
+        
+        # Add image_url if image exists
+        if inq.get('image_filename'):
+            inq_copy['image_url'] = f"/images/{username}/{inq['image_filename']}"
+        
+        inquiries_display.append(inq_copy)
+    
+    return jsonify({
+        "status": "ok",
+        "inquiries": inquiries_display
+    })
+
 @app.route('/inquiry/submit', methods=['POST'])
 def submit_inquiry():
     # Handle FormData instead of JSON
@@ -86,8 +183,20 @@ def submit_inquiry():
         "description": request.form.get('description'),
         "date_lost": request.form.get('date_lost'),
         "place_lost": request.form.get('place_lost'),
-        "username": request.form.get('username')
+        "username": request.form.get('username'),
+        "color": request.form.get('color'),
+        "cost": request.form.get('cost'),
+        "size_category": request.form.get('size_category')
     }
+    
+    # Validate required fields
+    required_fields = ['description', 'date_lost', 'place_lost', 'username', 'color', 'cost', 'size_category']
+    for field in required_fields:
+        if not inquiry.get(field):
+            return jsonify({
+                "status": "error",
+                "message": "Missing required fields"
+            }), 400
     
     # Handle image file if provided
     image = request.files.get('image')
@@ -101,12 +210,14 @@ def submit_inquiry():
         
         if user:
             user_role = user.get('role', 'user')
+            username = inquiry.get('username')
             
             # Determine storage folder based on role
             if user_role == 'admin':
                 storage_folder = Path(__file__).resolve().parent.parent / 'storage' / 'inventory_items'
             else:
-                storage_folder = Path(__file__).resolve().parent.parent / 'storage' / 'user_inquiries'
+                # Create user-specific folder
+                storage_folder = Path(__file__).resolve().parent.parent / 'storage' / 'user_inquiries' / username
             
             # Create folder if it doesn't exist
             storage_folder.mkdir(parents=True, exist_ok=True)
@@ -175,7 +286,30 @@ def submit_inquiry():
             print(f"[GW] Text embedding FAILED: {str(e)}")
     
     # Print to console for now latter for dataaset
-    print("Inquiry received:", inquiry)
+    inquiry_print = {k: v for k, v in inquiry.items() if k not in ['embedding', 'text_embedding']}
+    print("Inquiry received:", inquiry_print)
+    
+    # ============================================
+    # Save to JSON storage
+    # ============================================
+    record = {
+        "username": inquiry.get('username'),
+        "description": inquiry.get('description'),
+        "date_lost": inquiry.get('date_lost'),
+        "place_lost": inquiry.get('place_lost'),
+        "color": inquiry.get('color'),
+        "approx_cost": inquiry.get('cost'),
+        "size_category": inquiry.get('size_category'),
+        "image_filename": inquiry.get('image_saved_as'),
+        "image_embedding": inquiry.get('embedding'),
+        "text_embedding": inquiry.get('text_embedding')
+    }
+    
+    try:
+        inquiry_id = append_inquiry(record, inquiry.get('username'))
+    except Exception as e:
+        print(f"[GW] Failed to save inquiry to JSON: {str(e)}")
+        # Continue anyway - don't fail the request
     
     return jsonify({
         "status": "ok",
