@@ -33,6 +33,16 @@ export default function AdminDashboard({ user }) {
   const [matches, setMatches] = useState({});
   const [loadingMatches, setLoadingMatches] = useState(false);
 
+  // Inventory filter and search state
+  const [inventoryStatusFilter, setInventoryStatusFilter] = useState('all');
+  const [inventorySearchQuery, setInventorySearchQuery] = useState('');
+
+  // Clarification state
+  const [showClarificationModal, setShowClarificationModal] = useState(false);
+  const [clarificationInquiry, setClarificationInquiry] = useState(null);
+  const [clarificationQuestion, setClarificationQuestion] = useState('');
+  const [submittingClarification, setSubmittingClarification] = useState(false);
+
   useEffect(() => {
     if (activeTab === 'inquiries') {
       fetchUserInquiries();
@@ -299,6 +309,49 @@ export default function AdminDashboard({ user }) {
     setProcessingInquiry(null);
   };
 
+  const handleOpenClarificationModal = (username, inquiry) => {
+    setClarificationInquiry({ username, inquiry });
+    setClarificationQuestion('');
+    setShowClarificationModal(true);
+  };
+
+  const handleSubmitClarification = async () => {
+    if (!clarificationQuestion.trim()) {
+      alert('Please enter a question');
+      return;
+    }
+
+    setSubmittingClarification(true);
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_GATEWAY_URL}/admin/inquiries/${clarificationInquiry.username}/${clarificationInquiry.inquiry.id}/clarification`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          credentials: 'include',
+          body: JSON.stringify({ question: clarificationQuestion })
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'ok') {
+        setShowClarificationModal(false);
+        setClarificationQuestion('');
+        fetchUserInquiries(); // Refresh to show updated inquiry
+      } else {
+        alert('Failed to submit question: ' + (data.message || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Failed to submit question: Network error');
+    } finally {
+      setSubmittingClarification(false);
+    }
+  };
+
   return (
     <div style={styles.container}>
       <h2 style={styles.mainTitle}>Admin Dashboard</h2>
@@ -372,6 +425,32 @@ export default function AdminDashboard({ user }) {
                                 {loadingMatches && processingInquiry === inq.id ? 'Processing...' : 'Process Matches'}
                               </button>
                               
+                              {/* Ask Clarification Button */}
+                              <button
+                                onClick={() => handleOpenClarificationModal(username, inq)}
+                                style={styles.clarificationButton}
+                              >
+                                Ask Clarification
+                              </button>
+                              
+                              {/* Show Clarification Question and Answer if exists */}
+                              {inq.clarification && (
+                                <div style={styles.clarificationSection}>
+                                  <div style={styles.clarificationQuestion}>
+                                    <strong>Question:</strong> {inq.clarification.question}
+                                  </div>
+                                  {inq.clarification.answer ? (
+                                    <div style={styles.clarificationAnswer}>
+                                      <strong>Answer:</strong> {inq.clarification.answer}
+                                    </div>
+                                  ) : (
+                                    <div style={styles.clarificationPending}>
+                                      <em>Waiting for user's answer...</em>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              
                               <div style={styles.statusUpdate}>
                                 <label style={styles.statusLabel}>Update Status:</label>
                                 <select
@@ -415,6 +494,7 @@ export default function AdminDashboard({ user }) {
                                     <div style={styles.matchInfo}>
                                       <p style={styles.matchDescription}>{match.description}</p>
                                       <div style={styles.matchDetails}>
+                                        <span><strong>Status:</strong> <span style={styles.matchStatus}>{match.status}</span></span>
                                         <span><strong>Color:</strong> {match.color}</span>
                                         <span><strong>Place:</strong> {match.place_lost}</span>
                                         <span><strong>Size:</strong> {match.size_category}</span>
@@ -625,11 +705,84 @@ export default function AdminDashboard({ user }) {
               {/* Inventory List */}
               <div style={styles.inventorySection}>
                 <h3 style={styles.sectionTitle}>Inventory Items</h3>
+                
+                {/* Filter and Search Section */}
+                <div style={styles.filterSection}>
+                  <div style={styles.statusFilters}>
+                    <button
+                      onClick={() => setInventoryStatusFilter('all')}
+                      style={{
+                        ...styles.filterButton,
+                        ...(inventoryStatusFilter === 'all' ? styles.filterButtonActive : {})
+                      }}
+                    >
+                      All
+                    </button>
+                    <button
+                      onClick={() => setInventoryStatusFilter('submitted')}
+                      style={{
+                        ...styles.filterButton,
+                        ...(inventoryStatusFilter === 'submitted' ? styles.filterButtonActive : {})
+                      }}
+                    >
+                      Submitted
+                    </button>
+                    <button
+                      onClick={() => setInventoryStatusFilter('under_review')}
+                      style={{
+                        ...styles.filterButton,
+                        ...(inventoryStatusFilter === 'under_review' ? styles.filterButtonActive : {})
+                      }}
+                    >
+                      Under Review
+                    </button>
+                    <button
+                      onClick={() => setInventoryStatusFilter('matched')}
+                      style={{
+                        ...styles.filterButton,
+                        ...(inventoryStatusFilter === 'matched' ? styles.filterButtonActive : {})
+                      }}
+                    >
+                      Matched
+                    </button>
+                    <button
+                      onClick={() => setInventoryStatusFilter('resolved')}
+                      style={{
+                        ...styles.filterButton,
+                        ...(inventoryStatusFilter === 'resolved' ? styles.filterButtonActive : {})
+                      }}
+                    >
+                      Resolved
+                    </button>
+                  </div>
+                  
+                  <div style={styles.searchBox}>
+                    <input
+                      type="text"
+                      placeholder="Search by description..."
+                      value={inventorySearchQuery}
+                      onChange={(e) => setInventorySearchQuery(e.target.value)}
+                      style={styles.searchInput}
+                    />
+                  </div>
+                </div>
+
                 {inventory.length === 0 ? (
                   <div style={styles.emptyText}>No inventory items found.</div>
                 ) : (
                   <div style={styles.inquiryList}>
-                    {inventory.map((item) => (
+                    {inventory
+                      .filter(item => {
+                        // Status filter
+                        const matchesStatus = inventoryStatusFilter === 'all' || item.status === inventoryStatusFilter;
+                        
+                        // Search filter (case-insensitive description match)
+                        const matchesSearch = inventorySearchQuery.trim() === '' || 
+                          item.description.toLowerCase().includes(inventorySearchQuery.toLowerCase());
+                        
+                        return matchesStatus && matchesSearch;
+                      })
+                      .map((item) => (
                       <div key={item.id} style={styles.card}>
                         {editingItemId === item.id ? (
                           // Edit Mode
@@ -796,6 +949,40 @@ export default function AdminDashboard({ user }) {
             </div>
           )}
         </>
+      )}
+      
+      {/* Clarification Modal */}
+      {showClarificationModal && (
+        <div style={styles.modalOverlay}>
+          <div style={styles.modalContent}>
+            <h3 style={styles.modalTitle}>Ask Clarification Question</h3>
+            <p style={styles.modalText}>
+              Inquiry from: <strong>{clarificationInquiry?.username}</strong>
+            </p>
+            <textarea
+              placeholder="Enter your question for the user..."
+              value={clarificationQuestion}
+              onChange={(e) => setClarificationQuestion(e.target.value)}
+              style={styles.modalTextarea}
+              rows="4"
+            />
+            <div style={styles.modalButtons}>
+              <button
+                onClick={handleSubmitClarification}
+                disabled={submittingClarification}
+                style={styles.modalSubmitButton}
+              >
+                {submittingClarification ? 'Submitting...' : 'Submit Question'}
+              </button>
+              <button
+                onClick={() => setShowClarificationModal(false)}
+                style={styles.modalCancelButton}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1186,6 +1373,15 @@ const styles = {
     fontSize: '12px',
     color: '#666'
   },
+  matchStatus: {
+    fontSize: '11px',
+    fontWeight: '500',
+    color: '#0a6ed1',
+    backgroundColor: '#e6f7ff',
+    padding: '2px 8px',
+    borderRadius: '8px',
+    textTransform: 'capitalize'
+  },
   matchScores: {
     display: 'flex',
     flexDirection: 'column',
@@ -1234,5 +1430,153 @@ const styles = {
     borderRadius: '6px',
     color: '#ad6800',
     fontSize: '13px'
-  }
+  },
+  filterSection: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px',
+    marginBottom: '24px',
+    padding: '16px',
+    backgroundColor: '#fafafa',
+    borderRadius: '6px',
+    border: '1px solid #e8e8e8'
+  },
+  statusFilters: {
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap'
+  },
+  filterButton: {
+    padding: '8px 16px',
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#666',
+    backgroundColor: 'white',
+    border: '1px solid #d9d9d9',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
+  filterButtonActive: {
+    color: '#0a6ed1',
+    backgroundColor: '#e6f7ff',
+    borderColor: '#0a6ed1'
+  },
+  searchBox: {
+    display: 'flex',
+    gap: '8px'
+  },
+  searchInput: {
+    flex: 1,
+    padding: '10px 12px',
+    fontSize: '14px',
+    border: '1px solid #d9d9d9',
+    borderRadius: '4px',
+    outline: 'none',
+    fontFamily: 'inherit'
+  },
+  clarificationButton: {
+    width: '100%',
+    padding: '10px',
+    fontSize: '13px',
+    fontWeight: '500',
+    color: 'white',
+    backgroundColor: '#fa8c16',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    marginTop: '8px',
+    transition: 'background-color 0.2s'
+  },
+  clarificationSection: {
+    marginTop: '12px',
+    padding: '12px',
+    backgroundColor: '#fff7e6',
+    border: '1px solid #ffd591',
+    borderRadius: '6px'
+  },
+  clarificationQuestion: {
+    fontSize: '13px',
+    color: '#333',
+    marginBottom: '8px'
+  },
+  clarificationAnswer: {
+    fontSize: '13px',
+    color: '#52c41a',
+    padding: '8px',
+    backgroundColor: '#f6ffed',
+    borderRadius: '4px',
+    border: '1px solid #b7eb8f'
+  },
+  clarificationPending: {
+    fontSize: '12px',
+    color: '#999',
+    fontStyle: 'italic'
+  },
+  modalOverlay: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: '24px',
+    borderRadius: '8px',
+    maxWidth: '500px',
+    width: '90%',
+    boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+  },
+  modalTitle: {
+    margin: '0 0 16px 0',
+    fontSize: '18px',
+    fontWeight: '500',
+    color: '#333'
+  },
+  modalText: {
+    margin: '0 0 16px 0',
+    fontSize: '14px',
+    color: '#666'
+  },
+  modalTextarea: {
+    width: '100%',
+    padding: '10px 12px',
+    fontSize: '14px',
+    border: '1px solid #d9d9d9',
+    borderRadius: '4px',
+    outline: 'none',
+    fontFamily: 'inherit',
+    resize: 'vertical',
+    marginBottom: '16px'
+  },
+  modalButtons: {
+    display: 'flex',
+    gap: '12px',
+    justifyContent: 'flex-end'
+  },
+  modalSubmitButton: {
+    padding: '10px 20px',
+    fontSize: '14px',
+    fontWeight: '500',
+    color: 'white',
+    backgroundColor: '#fa8c16',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer'
+  },
+  modalCancelButton: {
+    padding: '10px 20px',
+    fontSize: '14px',
+    fontWeight: '500',
+    color: '#666',
+    backgroundColor: '#f5f5f5',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer'  }
 };

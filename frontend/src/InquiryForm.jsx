@@ -14,6 +14,10 @@ export default function InquiryForm({ user }) {
   const [loading, setLoading] = useState(false);
   const [inquiries, setInquiries] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
+  
+  // Clarification answer state
+  const [clarificationAnswers, setClarificationAnswers] = useState({});
+  const [submittingAnswer, setSubmittingAnswer] = useState({});
 
   // Fetch user's inquiries on mount
   useEffect(() => {
@@ -36,6 +40,42 @@ export default function InquiryForm({ user }) {
       console.error('Failed to fetch inquiries:', err);
     } finally {
       setLoadingList(false);
+    }
+  };
+
+  const handleSubmitClarificationAnswer = async (inquiryId) => {
+    const answer = clarificationAnswers[inquiryId]?.trim();
+    if (!answer) {
+      alert('Please enter an answer');
+      return;
+    }
+
+    setSubmittingAnswer(prev => ({ ...prev, [inquiryId]: true }));
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/inquiry/${inquiryId}/clarification/answer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include',
+        body: JSON.stringify({ answer })
+      });
+
+      const data = await response.json();
+      if (response.ok && data.status === 'ok') {
+        // Clear answer input
+        setClarificationAnswers(prev => ({ ...prev, [inquiryId]: '' }));
+        // Refresh inquiry list
+        fetchInquiries();
+      } else {
+        alert(data.message || 'Failed to submit answer');
+      }
+    } catch (err) {
+      console.error('Failed to submit answer:', err);
+      alert('Failed to submit answer');
+    } finally {
+      setSubmittingAnswer(prev => ({ ...prev, [inquiryId]: false }));
     }
   };
 
@@ -174,6 +214,37 @@ export default function InquiryForm({ user }) {
                   <div style={styles.inquiryTimestamp}>
                     Submitted: {new Date(inq.timestamp).toLocaleString()}
                   </div>
+                  
+                  {/* Clarification Section */}
+                  {inq.clarification && (
+                    <div style={styles.clarificationSection}>
+                      <div style={styles.clarificationQuestion}>
+                        <strong>Admin Question:</strong> {inq.clarification.question}
+                      </div>
+                      {inq.clarification.answer ? (
+                        <div style={styles.clarificationAnswered}>
+                          <strong>Your Answer:</strong> {inq.clarification.answer}
+                        </div>
+                      ) : (
+                        <div style={styles.clarificationAnswerForm}>
+                          <textarea
+                            placeholder="Type your answer here..."
+                            value={clarificationAnswers[inq.id] || ''}
+                            onChange={(e) => setClarificationAnswers(prev => ({ ...prev, [inq.id]: e.target.value }))}
+                            style={styles.clarificationTextarea}
+                            rows="3"
+                          />
+                          <button
+                            onClick={() => handleSubmitClarificationAnswer(inq.id)}
+                            disabled={submittingAnswer[inq.id]}
+                            style={styles.clarificationSubmitButton}
+                          >
+                            {submittingAnswer[inq.id] ? 'Submitting...' : 'Submit Answer'}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -535,5 +606,52 @@ const styles = {
     borderRadius: '4px',
     color: '#cf1322',
     fontSize: '14px'
-  }
+  },
+  clarificationSection: {
+    marginTop: '16px',
+    padding: '16px',
+    backgroundColor: '#fff7e6',
+    border: '1px solid #ffd591',
+    borderRadius: '6px'
+  },
+  clarificationQuestion: {
+    fontSize: '14px',
+    color: '#333',
+    marginBottom: '12px',
+    padding: '8px',
+    backgroundColor: 'white',
+    borderRadius: '4px'
+  },
+  clarificationAnswered: {
+    fontSize: '14px',
+    color: '#52c41a',
+    padding: '8px',
+    backgroundColor: '#f6ffed',
+    borderRadius: '4px',
+    border: '1px solid #b7eb8f'
+  },
+  clarificationAnswerForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px'
+  },
+  clarificationTextarea: {
+    padding: '10px 12px',
+    fontSize: '14px',
+    border: '1px solid #d9d9d9',
+    borderRadius: '4px',
+    outline: 'none',
+    fontFamily: 'inherit',
+    resize: 'vertical'
+  },
+  clarificationSubmitButton: {
+    padding: '10px 16px',
+    fontSize: '14px',
+    fontWeight: '500',
+    color: 'white',
+    backgroundColor: '#fa8c16',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    alignSelf: 'flex-start'  }
 };
