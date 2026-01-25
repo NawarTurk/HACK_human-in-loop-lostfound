@@ -228,3 +228,62 @@ def process_inquiry_matches(username, inquiry_id):
         "inquiry_id": inquiry_id,
         "matches": match_results
     })
+@admin_inquiry_bp.route('/inquiries/<username>/<inquiry_id>/clarification', methods=['POST'])
+def submit_clarification_question(username, inquiry_id):
+    """Admin submits a clarification question for an inquiry."""
+    user = session.get('user')
+    if not user or user.get('role') != 'admin':
+        return jsonify({
+            "status": "error",
+            "message": "Unauthorized - admin access required"
+        }), 403
+    
+    # Get question from request
+    data = request.get_json()
+    question = data.get('question', '').strip()
+    
+    if not question:
+        return jsonify({
+            "status": "error",
+            "message": "Question is required"
+        }), 400
+    
+    # Load user inquiries
+    user_folder = root_dir / 'storage' / 'user_inquiries' / username
+    data_path = user_folder / 'data.json'
+    
+    if not data_path.exists():
+        return jsonify({
+            "status": "error",
+            "message": "User inquiries not found"
+        }), 404
+    
+    inquiries = load_json_file(data_path)
+    
+    # Find the inquiry
+    inquiry_index = None
+    for i, inq in enumerate(inquiries):
+        if inq.get('id') == inquiry_id:
+            inquiry_index = i
+            break
+    
+    if inquiry_index is None:
+        return jsonify({
+            "status": "error",
+            "message": "Inquiry not found"
+        }), 404
+    
+    # Add clarification to inquiry
+    inquiries[inquiry_index]['clarification'] = {
+        "question": question,
+        "answer": None,
+        "asked_at": __import__('datetime').datetime.utcnow().isoformat()
+    }
+    
+    # Save updated inquiries
+    save_json_file(data_path, inquiries)
+    
+    return jsonify({
+        "status": "ok",
+        "message": "Clarification question submitted successfully"
+    })

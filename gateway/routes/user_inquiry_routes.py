@@ -1,11 +1,31 @@
 import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 from flask import Blueprint, jsonify, request, session
 from utils import load_json_file, save_json_file, append_inquiry, root_dir
 
 user_inquiry_bp = Blueprint('user_inquiry', __name__, url_prefix='/inquiry')
+
+# Load rate limit from environment
+RATE_LIMIT_SECONDS = int(os.getenv("INQUIRY_RATE_LIMIT_SECONDS", "60"))
+
+def is_rate_limited(inquiries):
+    """
+    Returns True if the user is submitting inquiries too frequently.
+    """
+    if not inquiries:
+        return False
+
+    last_inquiry = inquiries[-1]
+
+    if "created_at" not in last_inquiry:
+        return False
+
+    last_time = datetime.fromisoformat(last_inquiry["created_at"])
+    now = datetime.utcnow()
+
+    return (now - last_time) < timedelta(seconds=RATE_LIMIT_SECONDS)
 
 @user_inquiry_bp.route('/list', methods=['GET'])
 def list_inquiries():
@@ -54,6 +74,22 @@ def submit_inquiry():
         "size_category": request.form.get('size_category'),
         "status": request.form.get('status')  # Can be set by admin
     }
+    
+    # Rate limit check (only for regular users, not admin)
+    user = session.get('user')
+    is_admin = user and user.get('role') == 'admin'
+    
+    if not is_admin:
+        username = inquiry.get('username')
+        user_folder = root_dir / 'storage' / 'user_inquiries' / username
+        data_path = user_folder / 'data.json'
+        user_inquiries = load_json_file(data_path)
+        
+        if is_rate_limited(user_inquiries):
+            return jsonify({
+                "status": "error",
+                "message": f"Too many inquiries. Please wait {RATE_LIMIT_SECONDS} seconds before submitting again."
+            }), 429
     
     # Validate required fields (email not required for inventory items)
     required_fields = ['description', 'date_lost', 'place_lost', 'username', 'color', 'cost', 'size_category']
@@ -181,7 +217,8 @@ def submit_inquiry():
         "status": inquiry.get('status'),  # Include status from form
         "image_filename": inquiry.get('image_saved_as'),
         "image_embedding": inquiry.get('embedding'),
-        "text_embedding": inquiry.get('text_embedding')
+        "text_embedding": inquiry.get('text_embedding'),
+        "created_at": datetime.utcnow().isoformat()
     }
     
     try:
@@ -253,4 +290,69 @@ def delete_inquiry(inquiry_id):
     return jsonify({
         "status": "ok",
         "message": "Inquiry deleted successfully"
+    })
+@user_inquiry_bp.route('/<inquiry_id>/clarification/answer', methods=['POST'])
+def submit_clarification_answer(inquiry_id):
+    """User submits an answer to a clarification question."""
+    user = session.get('user')
+    if not user:
+        return jsonify({
+            "status": "error",
+            "message": "Not authenticated"
+        }), 401
+    
+    username = user.get('username')
+    
+    # Get answer from request
+    data = request.get_json()
+    answer = data.get('answer', '').strip()
+    
+    if not answer:
+        return jsonify({
+            "status": "error",
+            "message": "Answer is required"
+        }), 400
+    
+    # Load user inquiries
+    user_folder = root_dir / 'storage' / 'user_inquiries' / username
+    data_path = user_folder / 'data.json'
+    
+    if not data_path.exists():
+        return jsonify({
+            "status": "error",
+            "message": "Inquiries not found"
+        }), 404
+    
+    inquiries = load_json_file(data_path)
+    
+    # Find the inquiry
+    inquiry_index = None
+    for i, inq in enumerate(inquiries):
+        if inq.get('id') == inquiry_id:
+            inquiry_index = i
+            break
+    
+    if inquiry_index is None:
+        return jsonify({
+            "status": "error",
+            "message": "Inquiry not found"
+        }), 404
+    
+    # Check if clarification exists
+    if 'clarification' not in inquiries[inquiry_index]:
+        return jsonify({
+            "status": "error",
+            "message": "No clarification question found for this inquiry"
+        }), 400
+    
+    # Update clarification answer
+    inquiries[inquiry_index]['clarification']['answer'] = answer
+    inquiries[inquiry_index]['clarification']['answered_at'] = datetime.utcnow().isoformat()
+    
+    # Save updated inquiries
+    save_json_file(data_path, inquiries)
+    
+    return jsonify({
+        "status": "ok",
+        "message": "Answer submitted successfully"
     })

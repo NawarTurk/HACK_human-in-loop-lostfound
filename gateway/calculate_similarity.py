@@ -2,7 +2,18 @@
 Similarity calculation module for matching lost items with inventory.
 Compares text and image embeddings to find potential matches.
 """
+import os
 import numpy as np
+from dotenv import load_dotenv
+from utils import root_dir
+
+# Load ROOT .env file
+env_path = root_dir / '.env'
+load_dotenv(dotenv_path=env_path)
+
+# Get similarity weights from environment variables
+TEXT_WEIGHT = float(os.getenv('TEXT_SIMILARITY_WEIGHT', '0.4'))
+IMAGE_WEIGHT = float(os.getenv('IMAGE_SIMILARITY_WEIGHT', '0.6'))
 
 def cosine_similarity(vec1, vec2):
     """
@@ -43,15 +54,15 @@ def cosine_similarity(vec1, vec2):
     print(f"[SIMILARITY] Calculated similarity: {similarity:.3f}")
     return float(similarity)
 
-def calculate_match_score(inquiry, inventory_item, text_weight=0.4, image_weight=0.6):
+def calculate_match_score(inquiry, inventory_item, text_weight=None, image_weight=None):
     """
     Calculate overall match score between an inquiry and inventory item.
     
     Args:
         inquiry: Inquiry object with text_embedding and image_embedding
         inventory_item: Inventory item with text_embedding and image_embedding
-        text_weight: Weight for text similarity (default 0.4)
-        image_weight: Weight for image similarity (default 0.6)
+        text_weight: Weight for text similarity (default from env: TEXT_SIMILARITY_WEIGHT)
+        image_weight: Weight for image similarity (default from env: IMAGE_SIMILARITY_WEIGHT)
     
     Returns:
         dict: {
@@ -61,6 +72,12 @@ def calculate_match_score(inquiry, inventory_item, text_weight=0.4, image_weight
             "final_similarity": float
         }
     """
+    # Use environment variable weights if not provided
+    if text_weight is None:
+        text_weight = TEXT_WEIGHT
+    if image_weight is None:
+        image_weight = IMAGE_WEIGHT
+    
     # Extract embeddings
     inquiry_text_emb = inquiry.get('text_embedding')
     inquiry_image_emb = inquiry.get('image_embedding')
@@ -79,8 +96,9 @@ def calculate_match_score(inquiry, inventory_item, text_weight=0.4, image_weight
     
     # Calculate weighted final score
     if has_both_images:
-        # Both have images: use weighted combination (40% text, 60% image)
+        # Both have images: use weighted combination from environment variables
         final_sim = (text_weight * text_sim) + (image_weight * image_sim)
+        print(f"[SIMILARITY] Using weights: text={text_weight}, image={image_weight}")
     else:
         # One or both missing images: use only text similarity
         final_sim = text_sim
