@@ -57,7 +57,10 @@ def append_inquiry(record_dict, username, is_admin=False):
     # Add record with unique ID, timestamp, and status
     record_dict['id'] = str(uuid.uuid4())
     record_dict['timestamp'] = datetime.utcnow().isoformat() + 'Z'
-    record_dict['status'] = 'submitted'
+    
+    # Set status: use provided status or default based on role
+    if 'status' not in record_dict or not record_dict['status']:
+        record_dict['status'] = 'stored' if is_admin else 'submitted'
     
     # Append and save
     data_list.append(record_dict)
@@ -255,6 +258,108 @@ def admin_inventory():
         "inventory": items_display
     })
 
+@app.route('/admin/inventory/<item_id>', methods=['PATCH'])
+def update_inventory_item(item_id):
+    """Update inventory item fields (admin only)."""
+    user = session.get('user')
+    if not user or user.get('role') != 'admin':
+        return jsonify({
+            "status": "error",
+            "message": "Unauthorized - admin access required"
+        }), 403
+    
+    inventory_path = root_dir / 'storage' / 'inventory_items' / 'data.json'
+    inventory_items = load_json_file(inventory_path)
+    
+    # Find the item
+    item_index = None
+    for i, item in enumerate(inventory_items):
+        if item.get('id') == item_id:
+            item_index = i
+            break
+    
+    if item_index is None:
+        return jsonify({
+            "status": "error",
+            "message": "Item not found"
+        }), 404
+    
+    # Get update data
+    data = request.get_json()
+    if not data:
+        return jsonify({
+            "status": "error",
+            "message": "No update data provided"
+        }), 400
+    
+    # Update allowed fields
+    allowed_fields = ['status', 'description', 'color', 'approx_cost', 'size_category', 'place_lost']
+    for field in allowed_fields:
+        if field in data:
+            inventory_items[item_index][field] = data[field]
+    
+    # Save updated inventory
+    save_json_file(inventory_path, inventory_items)
+    
+    print(f"[GW] Updated inventory item {item_id}")
+    
+    return jsonify({
+        "status": "ok",
+        "message": "Item updated successfully"
+    })
+
+@app.route('/admin/inventory/<item_id>', methods=['DELETE'])
+def delete_inventory_item(item_id):
+    """Delete inventory item (admin only)."""
+    user = session.get('user')
+    if not user or user.get('role') != 'admin':
+        return jsonify({
+            "status": "error",
+            "message": "Unauthorized - admin access required"
+        }), 403
+    
+    inventory_path = root_dir / 'storage' / 'inventory_items' / 'data.json'
+    inventory_items = load_json_file(inventory_path)
+    
+    # Find and remove the item
+    item_index = None
+    for i, item in enumerate(inventory_items):
+        if item.get('id') == item_id:
+            item_index = i
+            break
+    
+    if item_index is None:
+        return jsonify({
+            "status": "error",
+            "message": "Item not found"
+        }), 404
+    
+    # Get item details before deleting
+    deleted_item = inventory_items[item_index]
+    
+    # Delete the image file if it exists
+    if deleted_item.get('image_filename'):
+        image_path = root_dir / 'storage' / 'inventory_items' / deleted_item['image_filename']
+        if image_path.exists():
+            try:
+                image_path.unlink()
+                print(f"[GW] Deleted image file: {image_path}")
+            except Exception as e:
+                print(f"[GW] Failed to delete image file: {str(e)}")
+    
+    # Remove item from list
+    inventory_items.pop(item_index)
+    
+    # Save updated inventory
+    save_json_file(inventory_path, inventory_items)
+    
+    print(f"[GW] Deleted inventory item {item_id}")
+    
+    return jsonify({
+        "status": "ok",
+        "message": "Item deleted successfully"
+    })
+
 @app.route('/inquiry/submit', methods=['POST'])
 def submit_inquiry():
     # Handle FormData instead of JSON
@@ -265,7 +370,8 @@ def submit_inquiry():
         "username": request.form.get('username'),
         "color": request.form.get('color'),
         "cost": request.form.get('cost'),
-        "size_category": request.form.get('size_category')
+        "size_category": request.form.get('size_category'),
+        "status": request.form.get('status')  # Can be set by admin
     }
     
     # Validate required fields
@@ -379,6 +485,7 @@ def submit_inquiry():
         "color": inquiry.get('color'),
         "approx_cost": inquiry.get('cost'),
         "size_category": inquiry.get('size_category'),
+        "status": inquiry.get('status'),  # Include status from form
         "image_filename": inquiry.get('image_saved_as'),
         "image_embedding": inquiry.get('embedding'),
         "text_embedding": inquiry.get('text_embedding')

@@ -5,6 +5,27 @@ export default function AdminDashboard({ user }) {
   const [userInquiries, setUserInquiries] = useState({});
   const [inventory, setInventory] = useState([]);
   const [loading, setLoading] = useState(false);
+  
+  // Add inventory form state
+  const [description, setDescription] = useState('');
+  const [placeFound, setPlaceFound] = useState('');
+  const [color, setColor] = useState('');
+  const [cost, setCost] = useState('');
+  const [sizeCategory, setSizeCategory] = useState('');
+  const [status, setStatus] = useState('stored');
+  const [image, setImage] = useState(null);
+  const [formMessage, setFormMessage] = useState('');
+  const [formError, setFormError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  
+  // Edit state
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editStatus, setEditStatus] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editColor, setEditColor] = useState('');
+  const [editCost, setEditCost] = useState('');
+  const [editSize, setEditSize] = useState('');
+  const [editPlace, setEditPlace] = useState('');
 
   useEffect(() => {
     if (activeTab === 'inquiries') {
@@ -49,6 +70,114 @@ export default function AdminDashboard({ user }) {
       console.error('Failed to fetch inventory:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAddInventory = async (e) => {
+    e.preventDefault();
+    setFormMessage('');
+    setFormError('');
+    setSubmitting(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('username', user.username);
+      formData.append('description', description);
+      formData.append('date_lost', new Date().toISOString().split('T')[0]); // Current date
+      formData.append('place_lost', placeFound);
+      formData.append('color', color);
+      formData.append('cost', cost);
+      formData.append('size_category', sizeCategory);
+      formData.append('status', status);
+      if (image) {
+        formData.append('image', image);
+      }
+
+      const response = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/inquiry/submit`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'ok') {
+        setFormMessage('Item added to inventory successfully!');
+        // Clear form
+        setDescription('');
+        setPlaceFound('');
+        setColor('');
+        setCost('');
+        setSizeCategory('');
+        setStatus('stored');
+        setImage(null);
+        const fileInput = document.querySelector('input[type="file"]');
+        if (fileInput) fileInput.value = '';
+        
+        // Refresh inventory list
+        fetchInventory();
+      } else {
+        setFormError(data.message || 'Failed to add item');
+      }
+    } catch (err) {
+      setFormError('Network error. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdateItem = async (itemId) => {
+    try {
+      const response = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/admin/inventory/${itemId}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          status: editStatus,
+          description: editDescription,
+          color: editColor,
+          approx_cost: editCost,
+          size_category: editSize,
+          place_lost: editPlace
+        })
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'ok') {
+        // Refresh inventory
+        fetchInventory();
+        setEditingItemId(null);
+      } else {
+        console.error('Failed to update item:', data.message);
+      }
+    } catch (err) {
+      console.error('Failed to update item:', err);
+    }
+  };
+
+  const handleDeleteItem = async (itemId) => {
+    if (!confirm('Are you sure you want to delete this item? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_GATEWAY_URL}/admin/inventory/${itemId}`, {
+        method: 'DELETE',
+        credentials: 'include'
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.status === 'ok') {
+        fetchInventory();
+      } else {
+        alert('Failed to delete item: ' + (data.message || 'Unknown error'));
+      }
+    } catch (err) {
+      alert('Failed to delete item: Network error');
     }
   };
 
@@ -129,43 +258,325 @@ export default function AdminDashboard({ user }) {
           {/* Inventory Tab */}
           {activeTab === 'inventory' && (
             <div style={styles.content}>
-              {inventory.length === 0 ? (
-                <div style={styles.emptyText}>No inventory items found.</div>
-              ) : (
-                <div style={styles.inquiryList}>
-                  {inventory.map((item) => (
-                    <div key={item.id} style={styles.card}>
-                      <div style={styles.cardHeader}>
-                        <span style={styles.cardId}>ID: {item.id.slice(0, 8)}...</span>
-                        <span style={styles.status}>{item.status}</span>
-                      </div>
-                      <div style={styles.cardBody}>
-                        {item.image_url && (
-                          <img
-                            src={`${import.meta.env.VITE_GATEWAY_URL}${item.image_url}`}
-                            alt="Inventory item"
-                            style={styles.image}
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                            }}
-                          />
+              {/* Add Inventory Form */}
+              <div style={styles.formSection}>
+                <h3 style={styles.sectionTitle}>Add New Inventory Item</h3>
+                <form onSubmit={handleAddInventory} style={styles.form}>
+                  <div style={styles.field}>
+                    <label style={styles.label}>Description</label>
+                    <textarea
+                      placeholder="Describe the item..."
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      required
+                      rows="3"
+                      style={styles.textarea}
+                    />
+                  </div>
+
+                  <div style={styles.field}>
+                    <label style={styles.label}>Place Found</label>
+                    <select
+                      value={placeFound}
+                      onChange={(e) => setPlaceFound(e.target.value)}
+                      required
+                      style={styles.input}
+                    >
+                      <option value="">Select building…</option>
+                      <option value="B">B — B Annex</option>
+                      <option value="CI">CI — CI Annex</option>
+                      <option value="CL">CL — CL Annex</option>
+                      <option value="D">D — D Annex</option>
+                      <option value="EN">EN — EN Annex</option>
+                      <option value="ER">ER — ER Building</option>
+                      <option value="EV">EV — Engineering, Computer Science and Visual Arts Integrated Complex</option>
+                      <option value="FA">FA — FA Annex</option>
+                      <option value="FB">FB — Faubourg Building (1250 Guy St. + 1600 Ste-Catherine St. W.)</option>
+                      <option value="FG">FG — Faubourg Ste-Catherine Building</option>
+                      <option value="GA">GA — Grey Nuns Annex</option>
+                      <option value="GM">GM — Guy-De Maisonneuve Building</option>
+                      <option value="GN">GN — Grey Nuns Building (1190 Guy St. + 1175 St-Mathieu St.)</option>
+                      <option value="GS">GS — GS Building</option>
+                      <option value="H">H — Henry F. Hall Building</option>
+                      <option value="K">K — K Annex</option>
+                      <option value="LB">LB — J.W. McConnell Building</option>
+                      <option value="LD">LD — LD Building</option>
+                      <option value="LS">LS — Learning Square</option>
+                      <option value="M">M — M Annex</option>
+                      <option value="MB">MB — John Molson Building</option>
+                      <option value="MI">MI — MI Annex</option>
+                      <option value="MU">MU — MU Annex</option>
+                      <option value="P">P — P Annex</option>
+                      <option value="PR">PR — PR Annex</option>
+                      <option value="Q">Q — Q Annex</option>
+                      <option value="R">R — R Annex</option>
+                      <option value="RR">RR — RR Annex</option>
+                      <option value="S">S — S Annex</option>
+                      <option value="SB">SB — Samuel Bronfman Building</option>
+                      <option value="T">T — T Annex</option>
+                      <option value="TD">TD — Toronto-Dominion Building</option>
+                      <option value="V">V — V Annex</option>
+                      <option value="VA">VA — Visual Arts Building</option>
+                      <option value="X">X — X Annex</option>
+                      <option value="Z">Z — Z Annex</option>
+                    </select>
+                  </div>
+
+                  <div style={styles.field}>
+                    <label style={styles.label}>Color</label>
+                    <select
+                      value={color}
+                      onChange={(e) => setColor(e.target.value)}
+                      required
+                      style={styles.input}
+                    >
+                      <option value="">Select color…</option>
+                      <option value="Black">Black</option>
+                      <option value="White">White</option>
+                      <option value="Grey">Grey</option>
+                      <option value="Blue">Blue</option>
+                      <option value="Red">Red</option>
+                      <option value="Green">Green</option>
+                      <option value="Yellow">Yellow</option>
+                      <option value="Pink">Pink</option>
+                      <option value="Brown">Brown</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+
+                  <div style={styles.field}>
+                    <label style={styles.label}>Approximate Cost</label>
+                    <input
+                      type="number"
+                      placeholder="Enter cost"
+                      value={cost}
+                      onChange={(e) => setCost(e.target.value)}
+                      required
+                      style={styles.input}
+                    />
+                  </div>
+
+                  <div style={styles.field}>
+                    <label style={styles.label}>Size Category</label>
+                    <select
+                      value={sizeCategory}
+                      onChange={(e) => setSizeCategory(e.target.value)}
+                      required
+                      style={styles.input}
+                    >
+                      <option value="">Select size…</option>
+                      <option value="Small">Small (keys, USB stick, AirPods)</option>
+                      <option value="Medium">Medium (phone, glasses case, power bank)</option>
+                      <option value="Large">Large (laptop, tablet, backpack)</option>
+                      <option value="Clothing Small">Clothing Small</option>
+                      <option value="Clothing Medium">Clothing Medium</option>
+                      <option value="Clothing Large or Bigger">Clothing Large or Bigger</option>
+                    </select>
+                  </div>
+
+                  <div style={styles.field}>
+                    <label style={styles.label}>Status</label>
+                    <select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value)}
+                      required
+                      style={styles.input}
+                    >
+                      <option value="stored">Stored (in inventory)</option>
+                      <option value="waiting_user">Waiting User (potential match found)</option>
+                      <option value="claimed">Claimed (picked up)</option>
+                    </select>
+                  </div>
+
+                  <div style={styles.field}>
+                    <label style={styles.label}>Image (optional)</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => setImage(e.target.files[0])}
+                      style={styles.input}
+                    />
+                  </div>
+
+                  {formMessage && <div style={styles.successMsg}>{formMessage}</div>}
+                  {formError && <div style={styles.errorMsg}>{formError}</div>}
+
+                  <button type="submit" disabled={submitting} style={styles.submitButton}>
+                    {submitting ? 'Adding...' : 'Add to Inventory'}
+                  </button>
+                </form>
+              </div>
+
+              {/* Inventory List */}
+              <div style={styles.inventorySection}>
+                <h3 style={styles.sectionTitle}>Inventory Items</h3>
+                {inventory.length === 0 ? (
+                  <div style={styles.emptyText}>No inventory items found.</div>
+                ) : (
+                  <div style={styles.inquiryList}>
+                    {inventory.map((item) => (
+                      <div key={item.id} style={styles.card}>
+                        {editingItemId === item.id ? (
+                          // Edit Mode
+                          <div style={styles.editForm}>
+                            <div style={styles.cardHeader}>
+                              <span style={styles.cardId}>ID: {item.id.slice(0, 8)}...</span>
+                              <div style={{display: 'flex', gap: '8px'}}>
+                                <button
+                                  onClick={() => handleUpdateItem(item.id)}
+                                  style={styles.saveButton}
+                                >
+                                  Save All
+                                </button>
+                                <button
+                                  onClick={() => setEditingItemId(null)}
+                                  style={styles.cancelButton}
+                                >
+                                  Cancel
+                                </button>
+                              </div>
+                            </div>
+                            
+                            <div style={styles.editFields}>
+                              <div style={styles.field}>
+                                <label style={styles.label}>Status</label>
+                                <select
+                                  value={editStatus}
+                                  onChange={(e) => setEditStatus(e.target.value)}
+                                  style={styles.input}
+                                >
+                                  <option value="stored">Stored</option>
+                                  <option value="waiting_user">Waiting User</option>
+                                  <option value="claimed">Claimed</option>
+                                </select>
+                              </div>
+                              
+                              <div style={styles.field}>
+                                <label style={styles.label}>Description</label>
+                                <textarea
+                                  value={editDescription}
+                                  onChange={(e) => setEditDescription(e.target.value)}
+                                  style={styles.textarea}
+                                  rows="3"
+                                />
+                              </div>
+                              
+                              <div style={styles.field}>
+                                <label style={styles.label}>Color</label>
+                                <select
+                                  value={editColor}
+                                  onChange={(e) => setEditColor(e.target.value)}
+                                  style={styles.input}
+                                >
+                                  <option value="Black">Black</option>
+                                  <option value="White">White</option>
+                                  <option value="Grey">Grey</option>
+                                  <option value="Blue">Blue</option>
+                                  <option value="Red">Red</option>
+                                  <option value="Green">Green</option>
+                                  <option value="Yellow">Yellow</option>
+                                  <option value="Pink">Pink</option>
+                                  <option value="Brown">Brown</option>
+                                  <option value="Other">Other</option>
+                                </select>
+                              </div>
+                              
+                              <div style={styles.field}>
+                                <label style={styles.label}>Cost</label>
+                                <input
+                                  type="number"
+                                  value={editCost}
+                                  onChange={(e) => setEditCost(e.target.value)}
+                                  style={styles.input}
+                                />
+                              </div>
+                              
+                              <div style={styles.field}>
+                                <label style={styles.label}>Size Category</label>
+                                <select
+                                  value={editSize}
+                                  onChange={(e) => setEditSize(e.target.value)}
+                                  style={styles.input}
+                                >
+                                  <option value="Small">Small</option>
+                                  <option value="Medium">Medium</option>
+                                  <option value="Large">Large</option>
+                                  <option value="Clothing Small">Clothing Small</option>
+                                  <option value="Clothing Medium">Clothing Medium</option>
+                                  <option value="Clothing Large or Bigger">Clothing Large or Bigger</option>
+                                </select>
+                              </div>
+                              
+                              <div style={styles.field}>
+                                <label style={styles.label}>Place Found</label>
+                                <input
+                                  type="text"
+                                  value={editPlace}
+                                  onChange={(e) => setEditPlace(e.target.value)}
+                                  style={styles.input}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          // View Mode
+                          <>
+                            <div style={styles.cardHeader}>
+                              <span style={styles.cardId}>ID: {item.id.slice(0, 8)}...</span>
+                              <div style={{display: 'flex', gap: '8px', alignItems: 'center'}}>
+                                <span style={styles.status}>{item.status}</span>
+                                <button
+                                  onClick={() => {
+                                    setEditingItemId(item.id);
+                                    setEditStatus(item.status);
+                                    setEditDescription(item.description);
+                                    setEditColor(item.color);
+                                    setEditCost(item.approx_cost);
+                                    setEditSize(item.size_category);
+                                    setEditPlace(item.place_lost);
+                                  }}
+                                  style={styles.editButton}
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteItem(item.id)}
+                                  style={styles.deleteButton}
+                                >
+                                  Delete
+                                </button>
+                              </div>
+                            </div>
+                            <div style={styles.cardBody}>
+                              {item.image_url && (
+                                <img
+                                  src={`${import.meta.env.VITE_GATEWAY_URL}${item.image_url}`}
+                                  alt="Inventory item"
+                                  style={styles.image}
+                                  onError={(e) => {
+                                    e.target.style.display = 'none';
+                                  }}
+                                />
+                              )}
+                              <p style={styles.description}>{item.description}</p>
+                              <div style={styles.details}>
+                                <span><strong>Date Lost:</strong> {item.date_lost}</span>
+                                <span><strong>Place:</strong> {item.place_lost}</span>
+                                <span><strong>Color:</strong> {item.color}</span>
+                                <span><strong>Cost:</strong> ${item.approx_cost}</span>
+                                <span><strong>Size:</strong> {item.size_category}</span>
+                              </div>
+                              <div style={styles.timestamp}>
+                                Added: {new Date(item.timestamp).toLocaleString()}
+                              </div>
+                            </div>
+                          </>
                         )}
-                        <p style={styles.description}>{item.description}</p>
-                        <div style={styles.details}>
-                          <span><strong>Date Lost:</strong> {item.date_lost}</span>
-                          <span><strong>Place:</strong> {item.place_lost}</span>
-                          <span><strong>Color:</strong> {item.color}</span>
-                          <span><strong>Cost:</strong> ${item.approx_cost}</span>
-                          <span><strong>Size:</strong> {item.size_category}</span>
-                        </div>
-                        <div style={styles.timestamp}>
-                          Added: {new Date(item.timestamp).toLocaleString()}
-                        </div>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </>
@@ -307,5 +718,143 @@ const styles = {
   timestamp: {
     fontSize: '11px',
     color: '#999'
+  },
+  formSection: {
+    padding: '24px',
+    backgroundColor: '#f9f9f9',
+    borderRadius: '6px',
+    marginBottom: '32px'
+  },
+  inventorySection: {
+    padding: '24px',
+    backgroundColor: '#ffffff',
+    borderRadius: '6px',
+    border: '1px solid #e8e8e8'
+  },
+  sectionTitle: {
+    margin: '0 0 16px 0',
+    fontSize: '16px',
+    fontWeight: '500',
+    color: '#333'
+  },
+  form: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  field: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px'
+  },
+  label: {
+    fontSize: '13px',
+    fontWeight: '500',
+    color: '#333'
+  },
+  input: {
+    padding: '10px 12px',
+    fontSize: '14px',
+    border: '1px solid #d9d9d9',
+    borderRadius: '4px',
+    outline: 'none',
+    fontFamily: 'inherit'
+  },
+  textarea: {
+    padding: '10px 12px',
+    fontSize: '14px',
+    border: '1px solid #d9d9d9',
+    borderRadius: '4px',
+    outline: 'none',
+    fontFamily: 'inherit',
+    resize: 'vertical'
+  },
+  submitButton: {
+    padding: '12px 24px',
+    fontSize: '14px',
+    fontWeight: '500',
+    color: 'white',
+    backgroundColor: '#0a6ed1',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s'
+  },
+  successMsg: {
+    padding: '12px',
+    backgroundColor: '#f6ffed',
+    border: '1px solid #b7eb8f',
+    borderRadius: '4px',
+    color: '#389e0d',
+    fontSize: '13px'
+  },
+  errorMsg: {
+    padding: '12px',
+    backgroundColor: '#fff1f0',
+    border: '1px solid #ffccc7',
+    borderRadius: '4px',
+    color: '#cf1322',
+    fontSize: '13px'
+  },
+  statusSelect: {
+    padding: '4px 8px',
+    fontSize: '12px',
+    border: '1px solid #d9d9d9',
+    borderRadius: '4px',
+    fontWeight: '500',
+    color: '#0a6ed1',
+    backgroundColor: 'white'
+  },
+  editButton: {
+    padding: '4px 12px',
+    fontSize: '11px',
+    fontWeight: '500',
+    color: '#0a6ed1',
+    backgroundColor: 'transparent',
+    border: '1px solid #0a6ed1',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
+  deleteButton: {
+    padding: '4px 12px',
+    fontSize: '11px',
+    fontWeight: '500',
+    color: '#ff4d4f',
+    backgroundColor: 'transparent',
+    border: '1px solid #ff4d4f',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    transition: 'all 0.2s'
+  },
+  saveButton: {
+    padding: '4px 12px',
+    fontSize: '11px',
+    fontWeight: '500',
+    color: 'white',
+    backgroundColor: '#52c41a',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer'
+  },
+  cancelButton: {
+    padding: '4px 12px',
+    fontSize: '11px',
+    fontWeight: '500',
+    color: '#666',
+    backgroundColor: '#f5f5f5',
+    border: 'none',
+    borderRadius: '4px',
+    cursor: 'pointer'
+  },
+  editForm: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '16px'
+  },
+  editFields: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px'
   }
 };
