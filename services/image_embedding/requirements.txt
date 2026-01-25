@@ -1,4 +1,6 @@
-Flask
+flask
 flask-cors
 python-dotenv
 google-generativeai
+sentence-transformers
+pillow
