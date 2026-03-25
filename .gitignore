@@ -2,7 +2,7 @@
 .DS_Store
 
 # env
-.env
+.env_local
 
 # python
 __pycache__/
@@ -17,3 +17,4 @@ build/
 
 # storage (uploaded images)
 # storage/
+ explain.txt
