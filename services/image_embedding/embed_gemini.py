@@ -26,7 +26,7 @@ def embed_with_gemini(image_bytes, mime_type):
     # Step 2: Embed description
     print("[GEMINI] Embedding description...")
     embed_result = genai.embed_content(
-        model="models/text-embedding-004",
+        model="models/gemini-embedding-001",
         content=description
     )
     embedding = embed_result['embedding']

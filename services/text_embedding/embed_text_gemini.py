@@ -19,7 +19,7 @@ def embed_text_gemini(text):
     print("[GEMINI-TEXT] Embedding text...")
 
     result = genai.embed_content(
-        model="models/text-embedding-004",
+        model="models/gemini-embedding-001",
         content=text
     )
 
